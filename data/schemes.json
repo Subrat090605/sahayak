@@ -1,0 +1,270 @@
+[
+  {
+    "id": "pm-kisan",
+    "name_en": "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)",
+    "name_hi": "पीएम-किसान (प्रधानमंत्री किसान सम्मान निधि)",
+    "benefit_en": "Direct income support of Rs 6,000 per year transferred in 3 equal installments of Rs 2,000",
+    "benefit_hi": "प्रति वर्ष 6,000 रुपये की प्रत्यक्ष आय सहायता, 2,000 रुपये की 3 समान किस्तों में बैंक खाते में",
+    "official_link": "https://pmkisan.gov.in",
+    "last_verified": "2026-10-25",
+    "source_note": "Official portal pmkisan.gov.in operational guidelines",
+    "eligibility": [
+      {
+        "field": "occupation",
+        "op": "eq",
+        "value": "farmer",
+        "label_en": "Must be a landholding farmer family",
+        "label_hi": "भूमिधारक किसान परिवार होना चाहिए"
+      },
+      {
+        "field": "land_acres",
+        "op": "gte",
+        "value": 0.01,
+        "label_en": "Must hold cultivable land",
+        "label_hi": "खेती योग्य भूमि होनी चाहिए"
+      }
+    ],
+    "exclusions": [
+      {
+        "field": "occupation",
+        "op": "eq",
+        "value": "salaried",
+        "label_en": "Serving or retired government/salaried officers and institutional landholders are excluded",
+        "label_hi": "सरकारी / वेतनभोगी कर्मचारी और संस्थागत भूमिधारक पात्र नहीं हैं"
+      },
+      {
+        "field": "annual_income",
+        "op": "gte",
+        "value": 1000000,
+        "label_en": "Income tax payers and high income individuals are excluded",
+        "label_hi": "आयकर दाता और उच्च आय वर्ग के व्यक्ति अपात्र हैं"
+      }
+    ],
+    "documents": [
+      {
+        "id": "aadhaar",
+        "name_en": "Aadhaar Card",
+        "name_hi": "आधार कार्ड",
+        "where_to_get_en": "UIDAI portal or nearest Aadhaar Seva Kendra / CSC",
+        "where_to_get_hi": "UIDAI पोर्टल या निकटतम आधार सेवा केंद्र / जन सेवा केंद्र"
+      },
+      {
+        "id": "land_record",
+        "name_en": "Land Ownership Record (Khata / Khasra / Khatauni)",
+        "name_hi": "भूमि स्वामित्व रिकॉर्ड (खसरा / खतौनी)",
+        "where_to_get_en": "State Revenue Department portal or local Tehsil / Patwari office",
+        "where_to_get_hi": "राज्य राजस्व विभाग का पोर्टल या स्थानीय तहसील / पटवारी कार्यालय"
+      },
+      {
+        "id": "bank_passbook",
+        "name_en": "Aadhaar-linked Bank Account Passbook",
+        "name_hi": "आधार से जुड़ा बैंक खाता पासबुक",
+        "where_to_get_en": "Your local bank branch or post office savings account",
+        "where_to_get_hi": "आपकी स्थानीय बैंक शाखा या डाकघर बचत बैंक"
+      }
+    ],
+    "form_fields": ["name", "age", "gender", "state", "district", "land_acres"],
+    "deadline": null
+  },
+  {
+    "id": "pm-jay",
+    "name_en": "Ayushman Bharat PM-JAY (Pradhan Mantri Jan Arogya Yojana)",
+    "name_hi": "आयुष्मान भारत पीएम-जय (प्रधानमंत्री जन आरोग्य योजना)",
+    "benefit_en": "Health insurance cover of up to Rs 5 lakh per family per year for secondary and tertiary hospitalization",
+    "benefit_hi": "अस्पताल में भर्ती और उपचार के लिए प्रति परिवार प्रति वर्ष 5 लाख रुपये तक का कैशलेस स्वास्थ्य कवर",
+    "official_link": "https://pmjay.gov.in",
+    "last_verified": "2026-10-25",
+    "source_note": "Official portal pmjay.gov.in SECC & AB-PMJAY eligibility criteria",
+    "eligibility": [
+      {
+        "field": "annual_income",
+        "op": "lte",
+        "value": 250000,
+        "label_en": "Family annual income should be low or listed in SECC deprivation criteria",
+        "label_hi": "पारिवारिक वार्षिक आय कम होनी चाहिए या SECC सूची में शामिल होना चाहिए"
+      }
+    ],
+    "exclusions": [
+      {
+        "field": "annual_income",
+        "op": "gte",
+        "value": 500000,
+        "label_en": "High-income families and tax payers excluded",
+        "label_hi": "उच्च आय वर्ग और आयकर दाता परिवार अपात्र हैं"
+      },
+      {
+        "field": "occupation",
+        "op": "eq",
+        "value": "salaried",
+        "label_en": "Organized sector salaried employees covered under other schemes excluded",
+        "label_hi": "संगठित क्षेत्र के वेतनभोगी कर्मचारी अपात्र हैं"
+      }
+    ],
+    "documents": [
+      {
+        "id": "aadhaar",
+        "name_en": "Aadhaar Card",
+        "name_hi": "आधार कार्ड",
+        "where_to_get_en": "UIDAI portal or nearest Aadhaar Seva Kendra / CSC",
+        "where_to_get_hi": "UIDAI पोर्टल या निकटतम आधार सेवा केंद्र / सीएससी"
+      },
+      {
+        "id": "ration_card",
+        "name_en": "Ration Card / BPL Card / Family ID",
+        "name_hi": "राशन कार्ड / बीपीएल कार्ड / परिवार पहचान पत्र",
+        "where_to_get_en": "State Food & Civil Supplies Department portal or Fair Price Shop / CSC",
+        "where_to_get_hi": "खाद्य एवं नागरिक आपूर्ति विभाग या राशन डीलर / सीएससी"
+      }
+    ],
+    "form_fields": ["name", "age", "gender", "state", "district", "annual_income"],
+    "deadline": null
+  },
+  {
+    "id": "pm-ujjwala",
+    "name_en": "PM Ujjwala Yojana 2.0 (Pradhan Mantri Ujjwala Yojana)",
+    "name_hi": "प्रधानमंत्री उज्ज्वला योजना 2.0",
+    "benefit_en": "Deposit-free LPG cylinder connection with first refill and hotplate (stove) provided free of cost",
+    "benefit_hi": "मुफ्त एलपीजी गैस कनेक्शन, पहला रिफिल सिलेंडर और गैस चूल्हा बिल्कुल मुफ्त",
+    "official_link": "https://www.pmuy.gov.in",
+    "last_verified": "2026-10-25",
+    "source_note": "Official portal pmuy.gov.in scheme guidelines for adult women in BPL/deprived households",
+    "eligibility": [
+      {
+        "field": "gender",
+        "op": "eq",
+        "value": "female",
+        "label_en": "Applicant must be an adult woman",
+        "label_hi": "आवेदक महिला होनी चाहिए"
+      },
+      {
+        "field": "age",
+        "op": "gte",
+        "value": 18,
+        "label_en": "Applicant must be at least 18 years of age",
+        "label_hi": "आवेदक की आयु कम से कम 18 वर्ष होनी चाहिए"
+      },
+      {
+        "field": "bpl_household",
+        "op": "is_true",
+        "value": true,
+        "label_en": "Must belong to poor / BPL / SECC listed household",
+        "label_hi": "गरीब / बीपीएल परिवार से संबंधित होना चाहिए"
+      },
+      {
+        "field": "has_lpg_connection",
+        "op": "is_false",
+        "value": false,
+        "label_en": "No one in the household should have an existing LPG connection",
+        "label_hi": "परिवार में किसी के पास पहले से एलपीजी गैस कनेक्शन नहीं होना चाहिए"
+      }
+    ],
+    "exclusions": [
+      {
+        "field": "has_lpg_connection",
+        "op": "is_true",
+        "value": true,
+        "label_en": "Existing LPG connection holders are excluded",
+        "label_hi": "जिनके पास पहले से गैस कनेक्शन है वे अपात्र हैं"
+      }
+    ],
+    "documents": [
+      {
+        "id": "aadhaar",
+        "name_en": "Aadhaar Card of Applicant and adult family members",
+        "name_hi": "आवेदक और परिवार के वयस्क सदस्यों का आधार कार्ड",
+        "where_to_get_en": "UIDAI portal or nearest Aadhaar Center",
+        "where_to_get_hi": "UIDAI पोर्टल या निकटतम आधार सेवा केंद्र"
+      },
+      {
+        "id": "ration_card",
+        "name_en": "Ration Card establishing family composition / BPL status",
+        "name_hi": "राशन कार्ड (पारिवारिक स्थिति प्रमाणित करने के लिए)",
+        "where_to_get_en": "Local Food & Civil Supplies Department / CSC",
+        "where_to_get_hi": "स्थानीय खाद्य आपूर्ति विभाग / जन सेवा केंद्र"
+      },
+      {
+        "id": "bank_passbook",
+        "name_en": "Bank Account Passbook (Jan Dhan or Savings account)",
+        "name_hi": "बैंक खाता पासबुक (जन धन या बचत खाता)",
+        "where_to_get_en": "Bank branch or bank mitra",
+        "where_to_get_hi": "बैंक शाखा या बैंक मित्र"
+      }
+    ],
+    "form_fields": ["name", "age", "gender", "state", "district", "bpl_household", "has_lpg_connection"],
+    "deadline": null
+  },
+  {
+    "id": "national-scholarship",
+    "name_en": "National Scholarship Portal - Post Matric Scholarship Scheme",
+    "name_hi": "राष्ट्रीय छात्रवृत्ति पोर्टल - पोस्ट-मैट्रिक छात्रवृत्ति योजना",
+    "benefit_en": "Financial scholarship covering tuition fees and monthly maintenance allowance for post-matric higher education",
+    "benefit_hi": "उच्च शिक्षा के लिए शिक्षण शुल्क और मासिक रखरखाव भत्ते की वित्तीय छात्रवृत्ति",
+    "official_link": "https://scholarships.gov.in",
+    "last_verified": "2026-10-25",
+    "source_note": "scholarships.gov.in central post-matric scholarship scheme guidelines",
+    "eligibility": [
+      {
+        "field": "occupation",
+        "op": "eq",
+        "value": "student",
+        "label_en": "Must be an enrolled student pursuing post-matric / post-secondary education",
+        "label_hi": "10वीं के बाद नियमित छात्र/छात्रा होना चाहिए"
+      },
+      {
+        "field": "annual_income",
+        "op": "lte",
+        "value": 250000,
+        "label_en": "Family annual income from all sources must not exceed Rs 2.5 Lakhs",
+        "label_hi": "परिवार की वार्षिक आय 2.5 लाख रुपये से अधिक नहीं होनी चाहिए"
+      }
+    ],
+    "exclusions": [
+      {
+        "field": "annual_income",
+        "op": "gte",
+        "value": 250001,
+        "label_en": "Family annual income exceeding Rs 2,50,000 is excluded",
+        "label_hi": "2,50,000 रुपये से अधिक पारिवारिक आय वाले छात्र अपात्र हैं"
+      },
+      {
+        "field": "occupation",
+        "op": "ne",
+        "value": "student",
+        "label_en": "Non-students are excluded",
+        "label_hi": "गैर-विद्यार्थी अपात्र हैं"
+      }
+    ],
+    "documents": [
+      {
+        "id": "aadhaar",
+        "name_en": "Aadhaar Card of the Student",
+        "name_hi": "विद्यार्थी का आधार कार्ड",
+        "where_to_get_en": "UIDAI portal or nearest Aadhaar center",
+        "where_to_get_hi": "UIDAI पोर्टल या निकटतम आधार केंद्र"
+      },
+      {
+        "id": "income_certificate",
+        "name_en": "Income Certificate issued by competent revenue authority",
+        "name_hi": "सक्षम राजस्व अधिकारी द्वारा जारी आय प्रमाण पत्र",
+        "where_to_get_en": "Tehsil office, Revenue department e-district portal, or CSC",
+        "where_to_get_hi": "तहसील कार्यालय, ई-डिस्ट्रिक्ट पोर्टल या जन सेवा केंद्र"
+      },
+      {
+        "id": "marksheet",
+        "name_en": "Previous Qualifying Educational Marksheet",
+        "name_hi": "पिछली उत्तीर्ण कक्षा की अंकतालिका",
+        "where_to_get_en": "School, college, or education board",
+        "where_to_get_hi": "स्कूल, कॉलेज या संबंधित शिक्षा बोर्ड"
+      },
+      {
+        "id": "bank_passbook",
+        "name_en": "Student's Bank Account Passbook",
+        "name_hi": "विद्यार्थी का बैंक खाता पासबुक",
+        "where_to_get_en": "Student's bank branch",
+        "where_to_get_hi": "विद्यार्थी की बैंक शाखा"
+      }
+    ],
+    "form_fields": ["name", "age", "gender", "state", "district", "annual_income", "education_level"],
+    "deadline": null
+  }
+]
