@@ -1,0 +1,33 @@
+[
+  {
+    "id": "example-scheme",
+    "name_en": "TODO",
+    "name_hi": "TODO",
+    "benefit_en": "TODO",
+    "benefit_hi": "TODO",
+    "official_link": "TODO",
+    "last_verified": "TODO",
+    "source_note": "TODO: official page used",
+    "eligibility": [
+      {
+        "field": "occupation",
+        "op": "eq",
+        "value": "TODO",
+        "label_en": "TODO",
+        "label_hi": "TODO"
+      }
+    ],
+    "exclusions": [],
+    "documents": [
+      {
+        "id": "aadhaar",
+        "name_en": "TODO",
+        "name_hi": "TODO",
+        "where_to_get_en": "TODO",
+        "where_to_get_hi": "TODO"
+      }
+    ],
+    "form_fields": ["name", "age", "state", "district"],
+    "deadline": null
+  }
+]
