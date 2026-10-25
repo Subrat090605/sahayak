@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>सहायक (Sahayak) — Voice-first Scheme Discovery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.75);
+      --bg-card-hover: rgba(31, 41, 55, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #f59e0b;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent-saffron: #f59e0b;
+      --accent-emerald: #10b981;
+      --accent-indigo: #6366f1;
+      --accent-danger: #ef4444;
+      --user-bubble-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      --bot-bubble-bg: rgba(31, 41, 55, 0.65);
+      --panel-width: 340px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Ambient Background Glow */
+    .ambient-glow {
+      position: fixed;
+      top: -20%;
+      left: 20%;
+      width: 60vw;
+      height: 60vw;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, rgba(99, 102, 241, 0.04) 50%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Header */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: rgba(10, 14, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-live {
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Buttons & Toggles */
+    .btn-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-chip.active {
+      background: var(--accent-saffron);
+      color: #111827;
+      border-color: var(--accent-saffron);
+      font-weight: 600;
+    }
+
+    .btn-chip.muted {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    .lang-toggle {
+      display: flex;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2px;
+    }
+
+    .lang-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .lang-btn.active {
+      background: var(--accent-saffron);
+      color: #111827;
+    }
+
+    /* Layout Container */
+    .app-container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 63px);
+      overflow: hidden;
+    }
+
+    /* Main Chat Section */
+    .chat-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      height: 100%;
+    }
+
+    /* Chat Messages Stream */
+    .chat-stream {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .chat-stream::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-stream::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+    }
+
+    /* Message Bubbles */
+    .msg-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      max-width: 82%;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .msg-row.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .msg-row.assistant {
+      align-self: flex-start;
+    }
+
+    .msg-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+    }
+
+    .msg-row.user .msg-avatar {
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 700;
+    }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      word-break: break-word;
+      position: relative;
+    }
+
+    .msg-row.user .msg-bubble {
+      background: var(--user-bubble-bg);
+      color: #111827;
+      font-weight: 500;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.2);
+    }
+
+    .msg-row.assistant .msg-bubble {
+      background: var(--bot-bubble-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .msg-bubble p + p {
+      margin-top: 8px;
+    }
+
+    .msg-bubble ul {
+      margin-left: 18px;
+      margin-top: 6px;
+    }
+
+    .msg-bubble li {
+      margin-bottom: 4px;
+    }
+
+    .msg-bubble a {
+      color: #60a5fa;
+      text-decoration: underline;
+      font-weight: 500;
+    }
+
+    .msg-time {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    /* Welcome / Hero Card */
+    .welcome-card {
+      background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(17, 24, 39, 0.9));
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      margin: 10px auto;
+      max-width: 620px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .welcome-card h2 {
+      font-size: 1.35rem;
+      margin-bottom: 8px;
+      font-weight: 700;
+      color: var(--accent-saffron);
+    }
+
+    .welcome-card p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .quick-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .quick-chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 14px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .quick-chip:hover {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: var(--accent-saffron);
+      color: #fbbf24;
+      transform: translateY(-1px);
+    }
+
+    /* Scheme Cards Container */
+    .scheme-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 12px;
+      width: 100%;
+    }
+
+    .scheme-card {
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 14px;
+      padding: 16px;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scheme-card:hover {
+      border-color: var(--accent-emerald);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.15);
+    }
+
+    .scheme-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .scheme-title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+
+    .status-badge.eligible {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+    }
+
+    .status-badge.maybe {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.5);
+    }
+
+    .scheme-benefit {
+      font-size: 0.86rem;
+      color: #d1d5db;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 3px solid var(--accent-emerald);
+    }
+
+    .scheme-reasons {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .scheme-reasons li {
+      margin-left: 16px;
+      margin-bottom: 3px;
+    }
+
+    .scheme-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .scheme-btn {
+      font-size: 0.78rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-weight: 500;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .scheme-btn.primary {
+      background: var(--accent-emerald);
+      color: #064e3b;
+      font-weight: 600;
+    }
+    .scheme-btn.primary:hover {
+      background: #34d399;
+    }
+
+    .scheme-btn.secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e5e7eb;
+      border: 1px solid var(--border-color);
+    }
+    .scheme-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .scheme-card.maybe {
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .scheme-card.maybe:hover {
+      border-color: var(--accent-saffron);
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.15);
+    }
+
+    .scheme-verify-note {
+      font-size: 0.72rem;
+      color: #9ca3af;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.08);
+      font-style: italic;
+    }
+
+    /* Typing Dots & Loading State */
+    .typing-indicator-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .typing-dots {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .typing-dots span {
+      width: 7px;
+      height: 7px;
+      background: var(--accent-saffron);
+      border-radius: 50%;
+      display: inline-block;
+      animation: dotPulse 1.4s infinite ease-in-out both;
+    }
+
+    .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes dotPulse {
+      0%, 80%, 100% {
+        transform: scale(0.6);
+        opacity: 0.4;
+      }
+      40% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* Error Bubble & Retry Button */
+    .error-bubble {
+      background: rgba(239, 68, 68, 0.12) !important;
+      border: 1px solid rgba(239, 68, 68, 0.35) !important;
+      color: #fecaca !important;
+      border-radius: 14px;
+      padding: 12px 16px;
+    }
+
+    .error-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #f87171;
+    }
+
+    .retry-btn {
+      margin-top: 10px;
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .retry-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+    }
+
+    /* Live Speech Transcript Banner */
+    .speech-preview {
+      display: none;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px dashed var(--accent-saffron);
+      border-radius: 12px;
+      padding: 10px 16px;
+      margin: 0 20px 10px;
+      font-size: 0.88rem;
+      color: #fef3c7;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .speech-preview.active {
+      display: flex;
+    }
+
+    /* Bottom Input Controls Bar */
+    .controls-bar {
+      background: rgba(10, 14, 23, 0.95);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--border-color);
+      padding: 14px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .controls-inner {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Large Mic Button */
+    .mic-button-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .mic-button {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      border: none;
+      color: #111827;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(245, 158, 11, 0.35);
+      transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .mic-button:hover {
+      transform: scale(1.06);
+      box-shadow: 0 8px 22px rgba(245, 158, 11, 0.5);
+    }
+
+    .mic-button.listening {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: #fff;
+      animation: pulse 1.4s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 16px rgba(239, 68, 68, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+      }
+    }
+
+    /* Text Box Fallback */
+    .text-input-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 28px;
+      padding: 4px 6px 4px 18px;
+      transition: all 0.2s;
+    }
+
+    .text-input-wrap:focus-within {
+      border-color: var(--accent-saffron);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .chat-input::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+
+    .send-btn:hover {
+      background: var(--accent-saffron);
+      color: #111827;
+    }
+
+    .status-caption {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      letter-spacing: 0.01em;
+    }
+
+    /* Side Panel: Agents at Work */
+    .side-panel {
+      width: var(--panel-width);
+      background: rgba(13, 19, 32, 0.95);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      flex-shrink: 0;
+      backdrop-filter: blur(16px);
+      transition: transform 0.3s ease;
+    }
+
+    .panel-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-header h3 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #e5e7eb;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: blink 1.8s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .trace-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .trace-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      animation: slideIn 0.2s ease-out;
+    }
+
+    .trace-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .agent-pill {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .agent-pill.profile {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
+
+    .agent-pill.eligibility {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .agent-pill.coordinator {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .trace-ms {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    .trace-action {
+      color: #d1d5db;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .trace-empty {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      margin-top: 40px;
+      line-height: 1.5;
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 860px) {
+      :root {
+        --panel-width: 100%;
+      }
+      .side-panel {
+        position: fixed;
+        right: 0;
+        top: 63px;
+        bottom: 0;
+        transform: translateX(100%);
+        z-index: 50;
+      }
+      .side-panel.open {
+        transform: translateX(0);
+      }
+      .toggle-trace-btn {
+        display: inline-flex !important;
+      }
+    }
+
+    .toggle-trace-btn {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🇮🇳</div>
+      <div class="brand-text">
+        <h1>सहायक (Sahayak) <span class="badge-live">Live</span></h1>
+        <p id="taglineText">बोलकर जानें अपनी सरकारी योजनाएं | Voice-first Citizen Schemes</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <!-- Language Toggle -->
+      <div class="lang-toggle" title="Switch Language">
+        <button class="lang-btn active" id="btnLangHi" onclick="setLanguage('hi')">हिंदी</button>
+        <button class="lang-btn" id="btnLangEn" onclick="setLanguage('en')">English</button>
+      </div>
+
+      <!-- Demo Farmer Shortcut -->
+      <button class="btn-chip" id="btnDemo" onclick="loadDemoScenario()" title="Load Sample Farmer Profile">
+        🌾 <span id="demoBtnLabel">डेमो प्रोफाइल</span>
+      </button>
+
+      <!-- Mute / Unmute Toggle Button -->
+      <button class="btn-chip" id="btnMute" onclick="toggleMute()" title="Toggle voice replies">
+        🔊 <span id="muteBtnLabel">आवाज़ ऑन</span>
+      </button>
+
+      <!-- Reset / Start Over -->
+      <button class="btn-chip" onclick="handleStartOver()" title="Reset Session">
+        🔄 <span id="resetBtnLabel">रीसेट</span>
+      </button>
+
+      <!-- Toggle Trace on Mobile -->
+      <button class="btn-chip toggle-trace-btn" onclick="toggleTracePanel()">
+        ⚡ Agents
+      </button>
+    </div>
+  </header>
+
+  <!-- App Main Content -->
+  <div class="app-container">
+    <!-- Chat Section -->
+    <section class="chat-section">
+      <!-- Stream -->
+      <div class="chat-stream" id="chatStream">
+        <!-- Welcome Hero -->
+        <div class="welcome-card" id="welcomeCard">
+          <h2>नमस्ते! मैं आपका डिजिटल सहायक हूँ।</h2>
+          <p>
+            आप अपनी स्थिति बोलकर या लिखकर बताएं — जैसे कि आपका पेशा, ज़मीन, या पारिवारिक आय।
+            हम आपको सरकारी योजनाओं, उनके लाभों, और आवश्यक दस्तावेज़ों की सही जानकारी देंगे।
+          </p>
+          <div class="quick-chips">
+            <button class="quick-chip" onclick="sendQuickMessage('मैं उन्नाव का किसान हूँ, मेरे पास दो एकड़ ज़मीन है')">
+              🌱 "मैं उन्नाव का किसान हूँ, दो एकड़ ज़मीन है"
+            </button>
+            <button class="quick-chip" onclick="sendQuickMessage('I am a student from Bihar looking for higher education scholarship')">
+              🎓 "Student looking for scholarship"
+            </button>
+            <button class="quick-chip" onclick="sendQuickMessage('हम बीपीएल परिवार से हैं और हमें नया गैस कनेक्शन चाहिए')">
+              🔥 "BPL परिवार को नया गैस कनेक्शन चाहिए"
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Speech Transcript Banner -->
+      <div class="speech-preview" id="speechPreview">
+        <span>🎙️ सुन रहे हैं... (Listening):</span>
+        <span id="speechLiveText" style="font-weight: 600;"></span>
+      </div>
+
+      <!-- Input Controls -->
+      <div class="controls-bar">
+        <div class="controls-inner">
+          <!-- Mic Button -->
+          <div class="mic-button-wrap">
+            <button class="mic-button" id="micBtn" onclick="toggleVoiceInput()" title="Click to speak (Web Speech API)">
+              🎤
+            </button>
+          </div>
+
+          <!-- Text Fallback -->
+          <div class="text-input-wrap">
+            <input 
+              type="text" 
+              class="chat-input" 
+              id="chatInput" 
+              placeholder="बोलें या यहाँ अपना संदेश लिखें... (Speak or type message)"
+              onkeydown="if(event.key === 'Enter') handleSendClick();"
+            />
+            <button class="send-btn" id="sendBtn" onclick="handleSendClick()" title="Send Message">
+              ➤
+            </button>
+          </div>
+        </div>
+
+        <div class="status-caption" id="statusCaption">
+          माइक दबाकर बोलें या लिखकर भेजें • Powered by Deterministic Rules & Multi-Agent AI
+        </div>
+      </div>
+    </section>
+
+    <!-- Side Panel: Agents at Work -->
+    <aside class="side-panel" id="sidePanel">
+      <div class="panel-header">
+        <h3><span class="live-dot"></span> Agents at Work (सक्रिय एजेंट्स)</h3>
+        <button class="btn-chip toggle-trace-btn" onclick="toggleTracePanel()" style="padding: 2px 8px;">✕</button>
+      </div>
+
+      <div class="trace-list" id="traceList">
+        <div class="trace-empty" id="traceEmpty">
+          जब आप बात करेंगे, यहाँ बैकग्राउंड में काम कर रहे एजेंट्स (Profile, Eligibility, Coordinator) का लाइव ट्रेस दिखाई देगा।
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // State management
+    let sessionId = localStorage.getItem('sahayak_session_id') || ('sess_' + Math.random().toString(36).substring(2, 10));
+    localStorage.setItem('sahayak_session_id', sessionId);
+    let currentLang = 'hi';
+    let isListening = false;
+    let recognition = null;
+    let isMuted = localStorage.getItem('sahayak_muted') === 'true';
+    let availableVoices = [];
+
+    // Load available voices for SpeechSynthesis
+    function loadVoices() {
+      if ('speechSynthesis' in window) {
+        availableVoices = window.speechSynthesis.getVoices() || [];
+      }
+    }
+    if ('speechSynthesis' in window) {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    // Initialize Web Speech API if supported
+    let finalTranscript = '';
+
+    function initSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const micWrap = document.querySelector('.mic-button-wrap');
+      const statusCaption = document.getElementById('statusCaption');
+
+      if (!SpeechRecognition) {
+        console.warn('Web Speech API not supported on this browser.');
+        if (micWrap) {
+          micWrap.style.display = 'none';
+        }
+        if (statusCaption) {
+          statusCaption.innerHTML = `<span style="color: #fbbf24;">⚠️ ${currentLang === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। कृपया नीचे लिखकर संदेश भेजें।' : 'Voice input not supported in this browser. Please type below.'}</span>`;
+        }
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = currentLang === 'hi' ? 'hi-IN' : 'en-IN';
+
+      recognition.onstart = () => {
+        isListening = true;
+        finalTranscript = '';
+        stopSpeaking(); // Stop speaking when user starts talking
+        document.getElementById('micBtn').classList.add('listening');
+        const preview = document.getElementById('speechPreview');
+        preview.classList.add('active');
+        document.getElementById('speechLiveText').innerText = '';
+        document.getElementById('statusCaption').innerText = currentLang === 'hi' ? 'सुन रहे हैं... बोलिए (Listening...)' : 'Listening... speak now';
+      };
+
+      recognition.onresult = (event) => {
+        stopSpeaking(); // Stop speaking immediately on any user speech detection
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        const displayTranscript = finalTranscript || interimTranscript;
+        document.getElementById('speechLiveText').innerText = displayTranscript;
+        document.getElementById('chatInput').value = displayTranscript;
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('Speech error:', event.error);
+        if (event.error === 'not-allowed') {
+          const msg = currentLang === 'hi'
+            ? 'माइक्रोफ़ोन अनुमति नहीं मिली। कृपया ब्राउज़र में अनुमति दें या नीचे लिखकर संदेश भेजें।'
+            : 'Microphone permission not granted. Please allow microphone or type below.';
+          alert(msg);
+        }
+        stopListening();
+      };
+
+      recognition.onend = () => {
+        stopListening();
+        const text = (finalTranscript || document.getElementById('chatInput').value).trim();
+        finalTranscript = '';
+        if (text) {
+          document.getElementById('chatInput').value = '';
+          handleSendMessage(text);
+        }
+      };
+    }
+
+    function toggleVoiceInput() {
+      stopSpeaking();
+      if (!recognition) {
+        initSpeech();
+      }
+      if (!recognition) {
+        return;
+      }
+
+      if (isListening) {
+        recognition.stop();
+      } else {
+        recognition.lang = currentLang === 'hi' ? 'hi-IN' : 'en-IN';
+        try {
+          recognition.start();
+        } catch (e) {
+          console.warn('Speech start error:', e);
+        }
+      }
+    }
+
+    function stopListening() {
+      isListening = false;
+      const mic = document.getElementById('micBtn');
+      if (mic) mic.classList.remove('listening');
+      const preview = document.getElementById('speechPreview');
+      if (preview) preview.classList.remove('active');
+      document.getElementById('statusCaption').innerText = currentLang === 'hi'
+        ? 'माइक दबाकर बोलें या लिखकर भेजें • Powered by Multi-Agent AI'
+        : 'Tap mic to speak or type message • Powered by Multi-Agent AI';
+    }
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      document.getElementById('btnLangHi').classList.toggle('active', lang === 'hi');
+      document.getElementById('btnLangEn').classList.toggle('active', lang === 'en');
+      if (recognition) {
+        recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
+      }
+      document.documentElement.lang = lang;
+      
+      // Update UI labels
+      if (lang === 'hi') {
+        document.getElementById('taglineText').innerText = 'बोलकर जानें अपनी सरकारी योजनाएं | Voice-first Citizen Schemes';
+        document.getElementById('demoBtnLabel').innerText = 'डेमो प्रोफाइल';
+        document.getElementById('resetBtnLabel').innerText = 'रीसेट';
+        document.getElementById('chatInput').placeholder = 'बोलें या यहाँ अपना संदेश लिखें... (Speak or type)';
+      } else {
+        document.getElementById('taglineText').innerText = 'Discover your welfare schemes by voice | Multi-Agent AI';
+        document.getElementById('demoBtnLabel').innerText = 'Demo Farmer';
+        document.getElementById('resetBtnLabel').innerText = 'Reset';
+        document.getElementById('chatInput').placeholder = 'Speak or type your message here...';
+      }
+      updateMuteButtonUI();
+    }
+
+    // Speech Synthesis (TTS) Functions
+    function updateMuteButtonUI() {
+      const btn = document.getElementById('btnMute');
+      if (!btn) return;
+      if (isMuted) {
+        btn.classList.add('muted');
+        btn.innerHTML = `🔇 <span id="muteBtnLabel">${currentLang === 'hi' ? 'मूक (Muted)' : 'Muted'}</span>`;
+        btn.title = currentLang === 'hi' ? 'आवाज़ चालू करें (Unmute)' : 'Unmute voice replies';
+      } else {
+        btn.classList.remove('muted');
+        btn.innerHTML = `🔊 <span id="muteBtnLabel">${currentLang === 'hi' ? 'आवाज़ ऑन' : 'Voice on'}</span>`;
+        btn.title = currentLang === 'hi' ? 'आवाज़ बंद करें (Mute)' : 'Mute voice replies';
+      }
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      localStorage.setItem('sahayak_muted', isMuted);
+      if (isMuted) {
+        stopSpeaking();
+      }
+      updateMuteButtonUI();
+    }
+
+    function getBestVoice(langCode) {
+      if (!availableVoices.length && 'speechSynthesis' in window) {
+        availableVoices = window.speechSynthesis.getVoices() || [];
+      }
+      const targetTag = (langCode === 'hi' ? 'hi-IN' : 'en-IN').toLowerCase();
+      const targetPrefix = langCode === 'hi' ? 'hi' : 'en';
+
+      let voice = availableVoices.find(v => v.lang && v.lang.toLowerCase().replace('_', '-') === targetTag);
+      if (voice) return voice;
+
+      voice = availableVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(targetPrefix));
+      if (voice) return voice;
+
+      return null;
+    }
+
+    function cleanTextForSpeech(rawText) {
+      if (!rawText) return '';
+      return rawText
+        .replace(/https?:\/\/[^\s]+/g, '') // omit raw URL links
+        .replace(/[*_#`~>]/g, '') // strip markdown markers
+        .replace(/[-•]\s+/g, ' ') // convert list dashes to natural pauses
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function stopSpeaking() {
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {
+          console.warn('Speech cancel error:', e);
+        }
+      }
+    }
+
+    function speakReply(text, lang) {
+      if (isMuted) return;
+      if (!('speechSynthesis' in window)) return;
+
+      stopSpeaking();
+
+      const spokenText = cleanTextForSpeech(text);
+      if (!spokenText) return;
+
+      const utterance = new SpeechSynthesisUtterance(spokenText);
+      const langTag = (lang === 'hi' || lang === 'hi-IN') ? 'hi-IN' : 'en-IN';
+      utterance.lang = langTag;
+
+      const voice = getBestVoice(lang);
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.warn('Speech synthesis speak error:', e);
+      }
+    }
+
+    function toggleTracePanel() {
+      document.getElementById('sidePanel').classList.toggle('open');
+    }
+
+    function handleSendClick() {
+      stopSpeaking();
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      handleSendMessage(text);
+    }
+
+    function sendQuickMessage(text) {
+      stopSpeaking();
+      const welcome = document.getElementById('welcomeCard');
+      if (welcome) welcome.style.display = 'none';
+      handleSendMessage(text);
+    }
+
+    let lastUserMessage = '';
+
+    function retryLastMessage() {
+      if (lastUserMessage) {
+        handleSendMessage(lastUserMessage);
+      }
+    }
+
+    async function handleSendMessage(message) {
+      stopSpeaking();
+      lastUserMessage = message;
+      const welcome = document.getElementById('welcomeCard');
+      if (welcome) welcome.style.display = 'none';
+
+      const input = document.getElementById('chatInput');
+      const sendBtn = document.getElementById('sendBtn');
+
+      // Set input loading state
+      if (input) {
+        input.disabled = true;
+        input.placeholder = currentLang === 'hi' ? 'एजेंट्स विचार कर रहे हैं... (Thinking...)' : 'Agents thinking...';
+      }
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.style.opacity = '0.5';
+      }
+
+      // 1. Append user message bubble
+      appendMessage('user', message);
+
+      // 2. Show typing indicator
+      const typingId = appendTypingIndicator();
+
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            message: message,
+            lang: currentLang,
+          }),
+        });
+
+        removeTypingIndicator(typingId);
+
+        if (!response.ok) {
+          throw new Error('Server returned HTTP ' + response.status);
+        }
+
+        const data = await response.json();
+
+        // 3. Update trace panel
+        if (data.trace && data.trace.length > 0) {
+          updateTracePanel(data.trace);
+        }
+
+        // 4. Update language if detected/synced
+        if (data.lang && data.lang !== currentLang) {
+          setLanguage(data.lang);
+        }
+
+        // 5. Append assistant reply & scheme cards
+        appendMessage('assistant', data.reply, data.matches);
+
+        // 6. Speak reply using speech synthesis in matching language voice
+        speakReply(data.reply, data.lang || currentLang);
+
+      } catch (err) {
+        removeTypingIndicator(typingId);
+        console.error('Chat error:', err);
+        appendErrorMessage(err);
+      } finally {
+        if (input) {
+          input.disabled = false;
+          input.placeholder = currentLang === 'hi' 
+            ? 'बोलें या यहाँ अपना संदेश लिखें... (Speak or type)' 
+            : 'Speak or type your message here...';
+          input.focus();
+        }
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.style.opacity = '1';
+        }
+      }
+    }
+
+    function appendErrorMessage(err) {
+      const stream = document.getElementById('chatStream');
+      const row = document.createElement('div');
+      row.className = 'msg-row assistant';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar';
+      avatar.innerText = '⚠️';
+
+      const bubbleWrap = document.createElement('div');
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble error-bubble';
+
+      const errTitle = currentLang === 'hi' 
+        ? 'क्षमा करें, संदेश भेजने में समस्या आई' 
+        : 'Sorry, trouble processing message';
+      const errMsg = currentLang === 'hi' 
+        ? 'नेटवर्क या सर्वर से संपर्क नहीं हो पाया। कृपया दोबारा प्रयास करें।' 
+        : 'Network or server issue encountered. Please try again.';
+
+      bubble.innerHTML = `
+        <div class="error-title">${errTitle}</div>
+        <div style="font-size: 0.85rem; margin-top: 4px;">${errMsg}</div>
+        <button class="retry-btn" onclick="retryLastMessage()">
+          🔄 ${currentLang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry Message'}
+        </button>
+      `;
+
+      const timeSpan = document.createElement('div');
+      timeSpan.className = 'msg-time';
+      const now = new Date();
+      timeSpan.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      bubbleWrap.appendChild(bubble);
+      bubbleWrap.appendChild(timeSpan);
+      row.appendChild(avatar);
+      row.appendChild(bubbleWrap);
+      stream.appendChild(row);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendMessage(sender, text, matches = []) {
+      const stream = document.getElementById('chatStream');
+      const row = document.createElement('div');
+      row.className = `msg-row ${sender}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar';
+      avatar.innerText = sender === 'user' ? '👤' : '🏛️';
+
+      const bubbleWrap = document.createElement('div');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+
+      // Format markdown line breaks and bold
+      let formattedText = escapeHtml(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n\n/g, '<br><br>')
+        .replace(/\n/g, '<br>')
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+      bubble.innerHTML = formattedText;
+
+      // Render scheme cards for evaluated matches
+      if (sender === 'assistant' && matches && matches.length > 0) {
+        const displayMatches = matches.filter(m => m.status === 'eligible' || m.status === 'maybe');
+        if (displayMatches.length > 0) {
+          const cardsContainer = document.createElement('div');
+          cardsContainer.className = 'scheme-cards';
+
+          displayMatches.forEach(m => {
+            const card = document.createElement('div');
+            const isEligible = m.status === 'eligible';
+            card.className = `scheme-card ${isEligible ? 'eligible' : 'maybe'}`;
+
+            const defaultTitle = m.scheme_id === 'pm-kisan' 
+              ? (currentLang === 'hi' ? 'पीएम-किसान (PM-KISAN)' : 'PM-KISAN Samman Nidhi')
+              : m.scheme_id === 'pm-jay'
+              ? (currentLang === 'hi' ? 'आयुष्मान भारत पीएम-जय' : 'Ayushman Bharat PM-JAY')
+              : m.scheme_id === 'pm-ujjwala'
+              ? (currentLang === 'hi' ? 'पीएम उज्ज्वला योजना 2.0' : 'PM Ujjwala Yojana 2.0')
+              : (currentLang === 'hi' ? 'राष्ट्रीय छात्रवृत्ति योजना' : 'National Scholarship Scheme');
+
+            const defaultBenefit = m.scheme_id === 'pm-kisan'
+              ? (currentLang === 'hi' ? 'प्रति वर्ष ₹6,000 प्रत्यक्ष आय सहायता (₹2,000 की 3 किस्तों में)' : 'Rs 6,000/year direct cash transfer in 3 installments')
+              : m.scheme_id === 'pm-jay'
+              ? (currentLang === 'hi' ? 'प्रति वर्ष ₹5 लाख तक का कैशलेस स्वास्थ्य सुरक्षा कवर' : 'Up to Rs 5 lakh free hospitalization cover per year')
+              : m.scheme_id === 'pm-ujjwala'
+              ? (currentLang === 'hi' ? 'मुफ्त एलपीजी कनेक्शन, पहला सिलेंडर और चूल्हा बिल्कुल मुफ्त' : 'Free LPG cylinder connection and stove')
+              : (currentLang === 'hi' ? 'उच्च शिक्षा हेतु ट्यूशन फीस और मासिक रखरखाव भत्ता' : 'Tuition fee coverage and monthly maintenance allowance');
+
+            const defaultLink = m.scheme_id === 'pm-kisan' ? 'https://pmkisan.gov.in'
+              : m.scheme_id === 'pm-jay' ? 'https://pmjay.gov.in'
+              : m.scheme_id === 'pm-ujjwala' ? 'https://www.pmuy.gov.in'
+              : 'https://scholarships.gov.in';
+
+            const title = m.name || defaultTitle;
+            const benefit = m.benefit || defaultBenefit;
+            const link = m.official_link || defaultLink;
+
+            const badgeHtml = isEligible
+              ? `<span class="status-badge eligible">✔ ${currentLang === 'hi' ? 'पात्र (Eligible)' : 'Eligible'}</span>`
+              : `<span class="status-badge maybe">⏳ ${currentLang === 'hi' ? 'संभावित (Potential)' : 'Potential'}</span>`;
+
+            let reasonsHtml = '';
+            if (m.reasons_met && m.reasons_met.length > 0) {
+              reasonsHtml += m.reasons_met.map(r => `<li>✔ ${escapeHtml(r)}</li>`).join('');
+            }
+            if (m.missing_fields && m.missing_fields.length > 0) {
+              reasonsHtml += `<li style="color: #fbbf24;">⏳ ${currentLang === 'hi' ? 'अपेक्षित जानकारी' : 'Required info'}: ${escapeHtml(m.missing_fields.join(', '))}</li>`;
+            }
+
+            card.innerHTML = `
+              <div class="scheme-header">
+                <div class="scheme-title">${escapeHtml(title)}</div>
+                ${badgeHtml}
+              </div>
+              <div class="scheme-benefit">🎯 ${escapeHtml(benefit)}</div>
+              ${reasonsHtml ? `<ul class="scheme-reasons">${reasonsHtml}</ul>` : ''}
+              <div class="scheme-actions">
+                <a href="${link}" target="_blank" rel="noopener noreferrer" class="scheme-btn primary">
+                  🌐 ${currentLang === 'hi' ? 'आधिकारिक पोर्टल (Official Portal)' : 'Official Portal'}
+                </a>
+              </div>
+              <div class="scheme-verify-note">
+                ℹ️ ${currentLang === 'hi' ? 'कृपया आधिकारिक पोर्टल पर जाकर नियमों का सत्यापन अवश्य करें।' : 'Please verify all rules and details on the official portal.'}
+              </div>
+            `;
+            cardsContainer.appendChild(card);
+          });
+
+          bubble.appendChild(cardsContainer);
+        }
+      }
+
+      const timeSpan = document.createElement('div');
+      timeSpan.className = 'msg-time';
+      const now = new Date();
+      timeSpan.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      bubbleWrap.appendChild(bubble);
+      bubbleWrap.appendChild(timeSpan);
+
+      row.appendChild(avatar);
+      row.appendChild(bubbleWrap);
+      stream.appendChild(row);
+
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendTypingIndicator() {
+      const stream = document.getElementById('chatStream');
+      const id = 'typing_' + Date.now();
+      const row = document.createElement('div');
+      row.className = 'msg-row assistant';
+      row.id = id;
+
+      row.innerHTML = `
+        <div class="msg-avatar">🏛️</div>
+        <div class="msg-bubble" style="padding: 12px 18px;">
+          <div class="typing-indicator-box">
+            <div class="typing-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span style="font-size: 0.84rem; color: #9ca3af; font-style: italic;">
+              ${currentLang === 'hi' ? 'एजेंट्स गणना कर रहे हैं... (Agents thinking...)' : 'Agents evaluating schemes...'}
+            </span>
+          </div>
+        </div>
+      `;
+      stream.appendChild(row);
+      stream.scrollTop = stream.scrollHeight;
+      return id;
+    }
+
+    function removeTypingIndicator(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+
+    function updateTracePanel(traceList) {
+      const container = document.getElementById('traceList');
+      const empty = document.getElementById('traceEmpty');
+      if (empty) empty.style.display = 'none';
+
+      traceList.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'trace-card';
+
+        const agentClass = (item.agent || '').toLowerCase();
+        card.innerHTML = `
+          <div class="trace-top">
+            <span class="agent-pill ${agentClass}">${escapeHtml(item.agent || 'SYSTEM')}</span>
+            <span class="trace-ms">${item.ms || 0}ms</span>
+          </div>
+          <div class="trace-action">${escapeHtml(item.action || '')}</div>
+        `;
+        container.insertBefore(card, container.firstChild);
+      });
+    }
+
+    async function handleStartOver() {
+      stopSpeaking();
+      sessionId = 'sess_' + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('sahayak_session_id', sessionId);
+      const stream = document.getElementById('chatStream');
+      stream.innerHTML = '';
+      document.getElementById('traceList').innerHTML = `
+        <div class="trace-empty" id="traceEmpty">
+          सत्र रीसेट हो गया है। जब आप संदेश भेजेंगे, नया लाइव ट्रेस यहाँ दिखेगा।
+        </div>
+      `;
+      handleSendMessage('start over');
+    }
+
+    function loadDemoScenario() {
+      stopSpeaking();
+      sendQuickMessage('मैं उन्नाव का किसान हूँ, मेरे पास दो एकड़ ज़मीन है');
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Initialize speech on load
+    function onInit() {
+      initSpeech();
+      loadVoices();
+      updateMuteButtonUI();
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', onInit);
+    } else {
+      onInit();
+    }
+  </script>
+</body>
+</html>

@@ -294,6 +294,18 @@ def eligibility_agent(
         schemes = load_schemes()
 
     missing_fields = get_missing_fields(profile, schemes)
+    evaluation_results = evaluate_all(profile, schemes, lang=lang)
+    scheme_by_id = {s["id"]: s for s in schemes}
+
+    enriched_matches: list[dict[str, Any]] = []
+    for r in evaluation_results:
+        s_data = scheme_by_id.get(r["scheme_id"], {})
+        enriched_matches.append({
+            **r,
+            "name": s_data.get("name_hi" if lang == "hi" else "name_en", r["scheme_id"]),
+            "benefit": s_data.get("benefit_hi" if lang == "hi" else "benefit_en", ""),
+            "official_link": s_data.get("official_link", ""),
+        })
 
     # 1. If fields are missing: ask exactly ONE short follow-up question
     if missing_fields:
@@ -308,22 +320,18 @@ def eligibility_agent(
             "needs_follow_up": True,
             "missing_field": next_field,
             "missing_fields": missing_fields,
-            "matches": evaluate_all(profile, schemes, lang=lang),
+            "matches": enriched_matches,
         }
 
     # 2. All required fields are present: evaluate schemes deterministically
-    evaluation_results = evaluate_all(profile, schemes, lang=lang)
-    scheme_by_id = {s["id"]: s for s in schemes}
-
     eligible_schemes: list[dict[str, Any]] = []
-    for r in evaluation_results:
+    for r in enriched_matches:
         if r["status"] == "eligible":
-            s_data = scheme_by_id.get(r["scheme_id"], {})
             eligible_schemes.append({
                 "id": r["scheme_id"],
-                "name": s_data.get("name_hi" if lang == "hi" else "name_en", r["scheme_id"]),
-                "benefit": s_data.get("benefit_hi" if lang == "hi" else "benefit_en", ""),
-                "official_link": s_data.get("official_link", ""),
+                "name": r.get("name", r["scheme_id"]),
+                "benefit": r.get("benefit", ""),
+                "official_link": r.get("official_link", ""),
                 "reasons_met": r.get("reasons_met", []),
             })
 
