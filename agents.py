@@ -155,6 +155,14 @@ def _sanitize_profile_fields(raw_fields: dict[str, Any]) -> dict[str, Any]:
         else:
             clean[key] = str(val).strip()
 
+    # Domain inference: households with annual income > 2.5 Lakhs cannot be BPL
+    if "annual_income" in clean and clean["annual_income"] is not None:
+        try:
+            if float(clean["annual_income"]) > 250000 and "bpl_household" not in clean:
+                clean["bpl_household"] = False
+        except (ValueError, TypeError):
+            pass
+
     return clean
 
 

@@ -67,6 +67,25 @@ def reset_session(session_id: str, lang: str = "hi") -> dict[str, Any]:
     return SESSIONS[session_id]
 
 
+def is_unclear_message(message: str) -> bool:
+    """Detect if user input is unintelligible, random symbols, or gibberish."""
+    import re
+    clean = message.strip()
+    if not clean:
+        return True
+    # 1. No alphanumeric characters (e.g. only punctuation, symbols, emojis)
+    if not any(c.isalnum() for c in clean):
+        return True
+    # 2. Pure repetition of single character (e.g. '????', '.....', 'aaaaa', 'zzzz')
+    if len(clean) >= 4 and len(set(clean)) == 1:
+        return True
+    # 3. Only English consonants without spaces (keyboard mash)
+    if len(clean) >= 4 and not any(c.isspace() for c in clean):
+        if re.match(r"^[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{4,}$", clean):
+            return True
+    return False
+
+
 def is_start_over(message: str) -> bool:
     """Check if the user requested a fresh session start."""
     clean = message.strip().lower()
@@ -93,8 +112,33 @@ def handle_message(
     session = get_or_create_session(session_id, lang=initial_lang)
     trace: list[dict[str, Any]] = []
 
-    # 1. Handle "start over" phrase
-    if is_start_over(message):
+    clean = (message or "").strip()
+
+    # 1. Handle empty speech or empty message
+    if not clean:
+        t0 = time.perf_counter()
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        trace.append({
+            "agent": "coordinator",
+            "action": "empty speech or message received, prompted for input",
+            "ms": elapsed_ms,
+        })
+        current_lang = session.get("lang", initial_lang)
+        reply = (
+            "कोई आवाज़ या संदेश प्राप्त नहीं हुआ। कृपया माइक बटन दबाकर दोबारा बोलें, या नीचे लिखकर बताएं।"
+            if current_lang == "hi"
+            else "No voice or message received. Please tap the mic to speak again, or type your message below."
+        )
+        return {
+            "reply": reply,
+            "lang": current_lang,
+            "state": session["state"],
+            "matches": session.get("matches", []),
+            "trace": trace,
+        }
+
+    # 2. Handle "start over" phrase
+    if is_start_over(clean):
         t0 = time.perf_counter()
         reset_session(session["session_id"], lang=session["lang"])
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
@@ -114,6 +158,33 @@ def handle_message(
             "lang": current_lang,
             "state": "COLLECT_PROFILE",
             "matches": [],
+            "trace": trace,
+        }
+
+    # 3. Handle unclear language / symbols / gibberish
+    if is_unclear_message(clean):
+        t0 = time.perf_counter()
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        trace.append({
+            "agent": "coordinator",
+            "action": "unclear language or symbols detected, requested clarification",
+            "ms": elapsed_ms,
+        })
+        current_lang = session.get("lang", initial_lang)
+        reply = (
+            "क्षमा करें, हम आपकी बात पूरी तरह समझ नहीं पाए। कृपया आसान शब्दों में बताएं (जैसे: आप क्या काम करते हैं और आपके पास कितनी ज़मीन है), या नीचे लिखकर पुनः प्रयास करें।"
+            if current_lang == "hi"
+            else "Sorry, we could not clearly understand your message. Please describe in simple words (e.g., your occupation and land ownership), or type below to retry."
+        )
+        session["history"].append({
+            "user": message,
+            "bot": reply,
+        })
+        return {
+            "reply": reply,
+            "lang": current_lang,
+            "state": session["state"],
+            "matches": session.get("matches", []),
             "trace": trace,
         }
 

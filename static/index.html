@@ -819,6 +819,53 @@
       }
     }
 
+            .app-disclaimer {
+      font-size: 0.73rem;
+      color: #9ca3af;
+      text-align: center;
+      padding: 4px 12px 10px 12px;
+      letter-spacing: 0.2px;
+      opacity: 0.85;
+    }
+
+    /* Demo Mode Styles */
+    .btn-chip.btn-demo-active {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.3));
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .btn-chip.playing {
+      background: rgba(16, 185, 129, 0.25) !important;
+      border-color: rgba(16, 185, 129, 0.6) !important;
+      color: #34d399 !important;
+      animation: pulseGlow 1.8s infinite;
+    }
+
+    .demo-banner-box {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 12px;
+      padding: 10px 16px;
+      margin: 8px auto 14px auto;
+      max-width: 580px;
+      text-align: center;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .demo-completion-card {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(17, 24, 39, 0.85));
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin: 14px auto;
+      max-width: 620px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      animation: fadeIn 0.4s ease-out;
+    }
+
     /* Error Bubble & Retry Button */
     .error-bubble {
       background: rgba(239, 68, 68, 0.12) !important;
@@ -898,6 +945,13 @@
     }
 
     /* Large Mic Button */
+        .mic-button.unsupported {
+      background: #374151 !important;
+      color: #9ca3af !important;
+      box-shadow: none !important;
+      cursor: pointer;
+    }
+
     .mic-button-wrap {
       position: relative;
       flex-shrink: 0;
@@ -1174,8 +1228,8 @@
       </div>
 
       <!-- Demo Farmer Shortcut -->
-      <button class="btn-chip" id="btnDemo" onclick="loadDemoScenario()" title="Load Sample Farmer Profile">
-        🌾 <span id="demoBtnLabel">डेमो प्रोफाइल</span>
+      <button class="btn-chip btn-demo-active" id="btnDemo" onclick="playDemoMode()" title="Load sample farmer profile & play full flow without speech">
+        ▶️ <span id="demoBtnLabel">डेमो मोड (Demo Mode)</span>
       </button>
 
       <!-- Mute / Unmute Toggle Button -->
@@ -1209,6 +1263,9 @@
             हम आपको सरकारी योजनाओं, उनके लाभों, और आवश्यक दस्तावेज़ों की सही जानकारी देंगे।
           </p>
           <div class="quick-chips">
+            <button class="quick-chip demo-play-chip" onclick="playDemoMode()" style="background: rgba(245, 158, 11, 0.22); border-color: rgba(245, 158, 11, 0.6); color: #fbbf24; font-weight: 600;">
+              ▶️ "डेमो मोड चलाएं (Play Full Scenario without Speech)"
+            </button>
             <button class="quick-chip" onclick="sendQuickMessage('मैं उन्नाव का किसान हूँ, मेरे पास दो एकड़ ज़मीन है')">
               🌱 "मैं उन्नाव का किसान हूँ, दो एकड़ ज़मीन है"
             </button>
@@ -1256,6 +1313,9 @@
         <div class="status-caption" id="statusCaption">
           माइक दबाकर बोलें या लिखकर भेजें • Powered by Deterministic Rules & Multi-Agent AI
         </div>
+        <footer class="app-disclaimer" id="footerDisclaimer">
+          ⚠️ सहायक एक प्रोटोटाइप है, आधिकारिक सरकारी सेवा नहीं। कृपया आधिकारिक पोर्टल पर नियमों का सत्यापन अवश्य करें।
+        </footer>
       </div>
     </section>
 
@@ -1298,19 +1358,49 @@
     // Initialize Web Speech API if supported
     let finalTranscript = '';
 
+    function showUnsupportedBrowserNotice() {
+      appendErrorMessage({
+        title: currentLang === 'hi' ? '⚠️ वॉइस इनपुट समर्थित नहीं है (Browser Unsupported)' : '⚠️ Voice Input Not Supported',
+        message: currentLang === 'hi' 
+          ? 'आपके ब्राउज़र में आवाज़ पहचान (Speech Recognition) समर्थित नहीं है। कोई बात नहीं — आप नीचे दिए गए बॉक्स में लिखकर आसानी से बात कर सकते हैं!' 
+          : 'Voice input is not supported in this browser. Please chat by typing in the box below!',
+        type: 'unsupported'
+      });
+      const input = document.getElementById('chatInput');
+      if (input) input.focus();
+    }
+
+    function showEmptySpeechNotice() {
+      appendErrorMessage({
+        title: currentLang === 'hi' ? '🎤 कोई आवाज़ सुनाई नहीं दी (Empty Speech)' : '🎤 No Speech Detected',
+        message: currentLang === 'hi'
+          ? 'माइक में कोई आवाज़ नहीं आई। कृपया माइक दबाकर दोबारा बोलें, या नीचे बॉक्स में लिखकर बताएं।'
+          : 'No speech was detected. Please tap the mic to speak again, or type your message below.',
+        type: 'empty_speech'
+      });
+      const input = document.getElementById('chatInput');
+      if (input) input.focus();
+    }
+
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const micWrap = document.querySelector('.mic-button-wrap');
+      const micBtn = document.getElementById('micBtn');
       const statusCaption = document.getElementById('statusCaption');
 
       if (!SpeechRecognition) {
         console.warn('Web Speech API not supported on this browser.');
-        if (micWrap) {
-          micWrap.style.display = 'none';
+        if (micBtn) {
+          micBtn.classList.add('unsupported');
+          micBtn.setAttribute('title', currentLang === 'hi' 
+            ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है (नीचे लिखकर बताएं)' 
+            : 'Voice input not supported in this browser (please type below)');
+          micBtn.onclick = () => { showUnsupportedBrowserNotice(); };
         }
         if (statusCaption) {
           statusCaption.innerHTML = `<span style="color: #fbbf24;">⚠️ ${currentLang === 'hi' ? 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। कृपया नीचे लिखकर संदेश भेजें।' : 'Voice input not supported in this browser. Please type below.'}</span>`;
         }
+        const input = document.getElementById('chatInput');
+        if (input) input.focus();
         return;
       }
 
@@ -1347,11 +1437,20 @@
 
       recognition.onerror = (event) => {
         console.warn('Speech error:', event.error);
-        if (event.error === 'not-allowed') {
-          const msg = currentLang === 'hi'
-            ? 'माइक्रोफ़ोन अनुमति नहीं मिली। कृपया ब्राउज़र में अनुमति दें या नीचे लिखकर संदेश भेजें।'
-            : 'Microphone permission not granted. Please allow microphone or type below.';
-          alert(msg);
+        if (event.error === 'no-speech') {
+          showEmptySpeechNotice();
+        } else if (event.error === 'not-allowed') {
+          appendErrorMessage({
+            title: currentLang === 'hi' ? '🎤 माइक्रोफ़ोन अनुमति अस्वीकृत' : '🎤 Microphone Access Denied',
+            message: currentLang === 'hi'
+              ? 'माइक्रोफ़ोन अनुमति नहीं मिली। कृपया ब्राउज़र सेटिंग्स में अनुमति दें या नीचे लिखकर संदेश भेजें।'
+              : 'Microphone permission was denied. Please allow microphone access or type below.',
+            type: 'permission'
+          });
+          const input = document.getElementById('chatInput');
+          if (input) input.focus();
+        } else if (event.error !== 'aborted') {
+          showEmptySpeechNotice();
         }
         stopListening();
       };
@@ -1363,16 +1462,24 @@
         if (text) {
           document.getElementById('chatInput').value = '';
           handleSendMessage(text);
+        } else {
+          showEmptySpeechNotice();
         }
       };
     }
 
     function toggleVoiceInput() {
       stopSpeaking();
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        showUnsupportedBrowserNotice();
+        return;
+      }
       if (!recognition) {
         initSpeech();
       }
       if (!recognition) {
+        showUnsupportedBrowserNotice();
         return;
       }
 
@@ -1411,14 +1518,18 @@
       // Update UI labels
       if (lang === 'hi') {
         document.getElementById('taglineText').innerText = 'बोलकर जानें अपनी सरकारी योजनाएं | Voice-first Citizen Schemes';
-        document.getElementById('demoBtnLabel').innerText = 'डेमो प्रोफाइल';
+        document.getElementById('demoBtnLabel').innerText = 'डेमो मोड (Demo)';
         document.getElementById('resetBtnLabel').innerText = 'रीसेट';
         document.getElementById('chatInput').placeholder = 'बोलें या यहाँ अपना संदेश लिखें... (Speak or type)';
+        const fDisc = document.getElementById('footerDisclaimer');
+        if (fDisc) fDisc.innerText = '⚠️ सहायक एक प्रोटोटाइप है, आधिकारिक सरकारी सेवा नहीं। कृपया आधिकारिक पोर्टल पर नियमों का सत्यापन अवश्य करें।';
       } else {
         document.getElementById('taglineText').innerText = 'Discover your welfare schemes by voice | Multi-Agent AI';
-        document.getElementById('demoBtnLabel').innerText = 'Demo Farmer';
+        document.getElementById('demoBtnLabel').innerText = 'Demo Mode (Play)';
         document.getElementById('resetBtnLabel').innerText = 'Reset';
         document.getElementById('chatInput').placeholder = 'Speak or type your message here...';
+        const fDisc = document.getElementById('footerDisclaimer');
+        if (fDisc) fDisc.innerText = '⚠️ Sahayak is a prototype, not an official government service. Verify on the official portal.';
       }
       updateMuteButtonUI();
     }
@@ -1535,7 +1646,16 @@
 
     function retryLastMessage() {
       if (lastUserMessage) {
+        const input = document.getElementById('chatInput');
+        if (input) input.value = lastUserMessage;
         handleSendMessage(lastUserMessage);
+      } else {
+        const input = document.getElementById('chatInput');
+        if (input && input.value.trim()) {
+          handleSendMessage(input.value.trim());
+        } else if (input) {
+          input.focus();
+        }
       }
     }
 
@@ -1564,6 +1684,11 @@
       // 2. Show typing indicator
       const typingId = appendTypingIndicator();
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 25000); // 25s timeout
+
       try {
         const response = await fetch('/chat', {
           method: 'POST',
@@ -1573,8 +1698,10 @@
             message: message,
             lang: currentLang,
           }),
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
         removeTypingIndicator(typingId);
 
         if (!response.ok) {
@@ -1600,9 +1727,20 @@
         speakReply(data.reply, data.lang || currentLang);
 
       } catch (err) {
+        clearTimeout(timeoutId);
         removeTypingIndicator(typingId);
         console.error('Chat error:', err);
-        appendErrorMessage(err);
+        if (err.name === 'AbortError') {
+          appendErrorMessage({
+            title: currentLang === 'hi' ? '⏱️ अनुरोध का समय समाप्त (Request Timed Out)' : '⏱️ Request Timed Out',
+            message: currentLang === 'hi'
+              ? 'सर्वर से उत्तर आने में सामान्य से अधिक समय लग गया। कृपया नीचे लिखकर पुनः प्रयास करें।'
+              : 'The server took too long to respond. Please type your message below to retry.',
+            type: 'timeout'
+          });
+        } else {
+          appendErrorMessage(err, 'model');
+        }
       } finally {
         if (input) {
           input.disabled = false;
@@ -1618,32 +1756,73 @@
       }
     }
 
-    function appendErrorMessage(err) {
+    function appendErrorMessage(err, customType = null) {
       const stream = document.getElementById('chatStream');
       const row = document.createElement('div');
       row.className = 'msg-row assistant';
 
       const avatar = document.createElement('div');
       avatar.className = 'msg-avatar';
-      avatar.innerText = '⚠️';
+
+      let type = customType || (err && err.type) || 'model';
+      let errTitle = (err && err.title) || '';
+      let errMsg = (err && err.message) || '';
+
+      if (type === 'unsupported') {
+        avatar.innerText = '🚫';
+        if (!errTitle) errTitle = currentLang === 'hi' ? '⚠️ वॉइस इनपुट समर्थित नहीं है (Browser Unsupported)' : '⚠️ Voice Input Not Supported';
+        if (!errMsg) errMsg = currentLang === 'hi'
+          ? 'आपके ब्राउज़र में आवाज़ पहचान (Speech Recognition) समर्थित नहीं है। कोई बात नहीं — आप नीचे दिए गए बॉक्स में लिखकर आसानी से बात कर सकते हैं!'
+          : 'Voice input is not supported in this browser. Please chat by typing in the box below!';
+      } else if (type === 'empty_speech') {
+        avatar.innerText = '🎤';
+        if (!errTitle) errTitle = currentLang === 'hi' ? '🎤 कोई आवाज़ सुनाई नहीं दी (Empty Speech)' : '🎤 No Speech Detected';
+        if (!errMsg) errMsg = currentLang === 'hi'
+          ? 'माइक में कोई आवाज़ नहीं आई। कृपया माइक दबाकर दोबारा बोलें, या नीचे बॉक्स में लिखकर बताएं।'
+          : 'No speech was detected. Please tap the mic to speak again, or type your message below.';
+      } else if (type === 'timeout') {
+        avatar.innerText = '⏱️';
+        if (!errTitle) errTitle = currentLang === 'hi' ? '⏱️ अनुरोध का समय समाप्त (Request Timed Out)' : '⏱️ Request Timed Out';
+        if (!errMsg) errMsg = currentLang === 'hi'
+          ? 'सर्वर से उत्तर आने में सामान्य से अधिक समय लग गया। कृपया नीचे लिखकर पुनः प्रयास करें।'
+          : 'The server took too long to respond. Please type your message below to retry.';
+      } else {
+        avatar.innerText = '⚠️';
+        if (!errTitle) errTitle = currentLang === 'hi' ? '⚠️ AI सेवा में अस्थायी समस्या (Service Issue)' : '⚠️ Temporary Service Issue';
+        if (!errMsg) errMsg = currentLang === 'hi'
+          ? 'AI मॉडल या नेटवर्क से संपर्क में समस्या आई है। कृपया नीचे बॉक्स में लिखकर पुनः प्रयास करें।'
+          : 'Encountered an issue communicating with the AI service or network. Please try typing your message below to retry.';
+      }
 
       const bubbleWrap = document.createElement('div');
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble error-bubble';
 
-      const errTitle = currentLang === 'hi' 
-        ? 'क्षमा करें, संदेश भेजने में समस्या आई' 
-        : 'Sorry, trouble processing message';
-      const errMsg = currentLang === 'hi' 
-        ? 'नेटवर्क या सर्वर से संपर्क नहीं हो पाया। कृपया दोबारा प्रयास करें।' 
-        : 'Network or server issue encountered. Please try again.';
+      let retryActionBtn = '';
+      if (type === 'empty_speech') {
+        retryActionBtn = `
+          <button class="retry-btn" onclick="toggleVoiceInput()">
+            🎤 ${currentLang === 'hi' ? 'दोबारा बोलें (Retry Speech)' : 'Retry Speech'}
+          </button>
+        `;
+      } else if (type === 'unsupported') {
+        retryActionBtn = `
+          <button class="retry-btn" onclick="document.getElementById('chatInput').focus()">
+            ⌨️ ${currentLang === 'hi' ? 'लिखकर बताएं (Type Message)' : 'Type Message'}
+          </button>
+        `;
+      } else {
+        retryActionBtn = `
+          <button class="retry-btn" onclick="retryLastMessage()">
+            🔄 ${currentLang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry Message'}
+          </button>
+        `;
+      }
 
       bubble.innerHTML = `
         <div class="error-title">${errTitle}</div>
-        <div style="font-size: 0.85rem; margin-top: 4px;">${errMsg}</div>
-        <button class="retry-btn" onclick="retryLastMessage()">
-          🔄 ${currentLang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry Message'}
-        </button>
+        <div style="font-size: 0.85rem; margin-top: 4px; line-height: 1.4;">${errMsg}</div>
+        ${retryActionBtn}
       `;
 
       const timeSpan = document.createElement('div');
@@ -1657,6 +1836,12 @@
       row.appendChild(bubbleWrap);
       stream.appendChild(row);
       stream.scrollTop = stream.scrollHeight;
+
+      // Always focus text input
+      const input = document.getElementById('chatInput');
+      if (input) {
+        input.focus();
+      }
     }
 
     function appendMessage(sender, text, matches = []) {
@@ -1842,6 +2027,25 @@
         }
       }
 
+      // Add retry button if assistant asks for clarification due to unclear language
+      if (sender === 'assistant') {
+        const isUnclear = text.includes('समझ नहीं पाए') || text.includes('could not clearly understand');
+        if (isUnclear) {
+          const retryBtn = document.createElement('button');
+          retryBtn.className = 'retry-btn';
+          retryBtn.style.marginTop = '8px';
+          retryBtn.style.background = 'rgba(245, 158, 11, 0.2)';
+          retryBtn.style.borderColor = 'rgba(245, 158, 11, 0.5)';
+          retryBtn.style.color = '#fbbf24';
+          retryBtn.innerHTML = `🔄 ${currentLang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry'}`;
+          retryBtn.onclick = () => retryLastMessage();
+          bubble.appendChild(retryBtn);
+
+          const input = document.getElementById('chatInput');
+          if (input) input.focus();
+        }
+      }
+
       const timeSpan = document.createElement('div');
       timeSpan.className = 'msg-time';
       const now = new Date();
@@ -1922,9 +2126,161 @@
       handleSendMessage('start over');
     }
 
-    function loadDemoScenario() {
+    let isDemoPlaying = false;
+
+    function appendDemoBanner() {
+      const stream = document.getElementById('chatStream');
+      const banner = document.createElement('div');
+      banner.className = 'demo-banner-box';
+      banner.innerHTML = `
+        <div style="font-weight: 700; color: #f59e0b; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span>🎬</span>
+          <span>${currentLang === 'hi' ? 'डेमो मोड सक्रिय — उन्नाव किसान का पूरा प्रवाह' : 'Demo Mode Active — Unnao Farmer Full Scenario'}</span>
+        </div>
+        <div style="font-size: 0.82rem; color: #d1d5db; margin-top: 4px;">
+          ${currentLang === 'hi' 
+            ? 'बिना बोले पूरा प्रवाह (प्रोफाइल → योजना पात्रता → चेकलिस्ट → आवेदन फॉर्म व रिमाइंडर) स्वचालित रूप से प्रदर्शित हो रहा है।' 
+            : 'Playing complete scenario (Profile → Scheme Match → Checklist → Form Draft & Reminders) without voice.'}
+        </div>
+      `;
+      stream.appendChild(banner);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendDemoCompletionCard() {
+      const stream = document.getElementById('chatStream');
+      const card = document.createElement('div');
+      card.className = 'demo-completion-card';
+      const formUrl = `/form/pm-kisan?session_id=${sessionId}&auto_print=true`;
+      const remindersUrl = `/reminders.ics?scheme_id=pm-kisan&session_id=${sessionId}`;
+
+      card.innerHTML = `
+        <div style="font-size: 1.15rem; margin-bottom: 6px;">🎉 <strong>${currentLang === 'hi' ? 'डेमो सफलतापूर्वक पूर्ण हुआ!' : 'Demo Successfully Completed!'}</strong></div>
+        <p style="font-size: 0.85rem; color: #d1d5db; margin-bottom: 14px; line-height: 1.45;">
+          ${currentLang === 'hi' 
+            ? 'आपने देखा कि कैसे सहायक ने किसान की जानकारी का विश्लेषण किया, पात्रता नियमों की जाँच की, दस्तावेज़ चेकलिस्ट तैयार की, और आवेदन फॉर्म व कैलेंडर रिमाइंडर तैयार किए।'
+            : 'You witnessed how Sahayak analyzed citizen details, evaluated scheme rules, prepared a document checklist, and generated the printable application draft & reminders.'}
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+          <a href="${formUrl}" target="_blank" class="chat-pdf-btn" style="text-decoration: none;">
+            📥 ${currentLang === 'hi' ? 'आवेदन फॉर्म देखें / प्रिंट करें (Print PDF)' : 'View / Print PDF Form'}
+          </a>
+          <a href="${remindersUrl}" target="_blank" class="chat-ics-btn" style="text-decoration: none;">
+            📅 ${currentLang === 'hi' ? 'कैलेंडर रिमाइंडर (.ics)' : 'Download Reminders (.ics)'}
+          </a>
+          <button class="retry-btn" onclick="playDemoMode()" style="margin: 0; background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.5); color: #fbbf24;">
+            🔄 ${currentLang === 'hi' ? 'दोबारा डेमो चलाएं' : 'Replay Demo'}
+          </button>
+        </div>
+      `;
+      stream.appendChild(card);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    async function playDemoMode() {
+      if (isDemoPlaying) return;
+      isDemoPlaying = true;
       stopSpeaking();
-      sendQuickMessage('मैं उन्नाव का किसान हूँ, मेरे पास दो एकड़ ज़मीन है');
+      stopListening();
+
+      const demoBtn = document.getElementById('btnDemo');
+      if (demoBtn) {
+        demoBtn.classList.add('playing');
+        demoBtn.innerHTML = `⏳ <span id="demoBtnLabel">${currentLang === 'hi' ? 'डेमो चल रहा है...' : 'Demo playing...'}</span>`;
+      }
+
+      const welcome = document.getElementById('welcomeCard');
+      if (welcome) welcome.style.display = 'none';
+
+      // 1. Call POST /demo/load to set up the sample farmer profile and get demo steps
+      let demoSteps = [];
+      try {
+        const res = await fetch('/demo/load', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            lang: currentLang,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem('sahayak_session_id', sessionId);
+          }
+          if (data.trace && data.trace.length > 0) {
+            updateTracePanel(data.trace);
+          }
+          if (data.demo_steps && data.demo_steps.length > 0) {
+            demoSteps = data.demo_steps;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not call /demo/load, using built-in demo script:', err);
+      }
+
+      // Fallback demo script steps if /demo/load steps not returned
+      if (!demoSteps || demoSteps.length === 0) {
+        demoSteps = [
+          {
+            step: 1,
+            message_hi: 'नमस्ते, मैं उन्नाव का किसान हूँ और मेरे पास 2 एकड़ ज़मीन है।',
+            message_en: 'Hello, I am a farmer in Unnao with two acres of land.',
+          },
+          {
+            step: 2,
+            message_hi: 'मेरी वार्षिक पारिवारिक आय लगभग 80,000 रुपये है।',
+            message_en: 'My annual family income is around 80,000 rupees.',
+          },
+          {
+            step: 3,
+            message_hi: 'मुझे पीएम-किसान योजना के लिए कौन से दस्तावेज़ चाहिए?',
+            message_en: 'What documents do I need for PM-KISAN?',
+          },
+        ];
+      }
+
+      // Banner showing Demo Mode is running
+      appendDemoBanner();
+
+      // Play steps sequentially without needing speech
+      for (let i = 0; i < demoSteps.length; i++) {
+        if (!isDemoPlaying) break;
+        const step = demoSteps[i];
+        const userMsg = (currentLang === 'hi' ? step.message_hi : step.message_en) || step.message_hi;
+
+        // Populate text input for visual feedback
+        const input = document.getElementById('chatInput');
+        if (input) {
+          input.value = userMsg;
+        }
+
+        // Delay before sending message
+        await new Promise(r => setTimeout(r, 650));
+        if (!isDemoPlaying) break;
+
+        // Send turn via chat pipeline
+        await handleSendMessage(userMsg);
+
+        // Wait between turns so viewers can read assistant reply and check the live trace panel
+        if (i < demoSteps.length - 1) {
+          await new Promise(r => setTimeout(r, 2200));
+        }
+      }
+
+      isDemoPlaying = false;
+      if (demoBtn) {
+        demoBtn.classList.remove('playing');
+        demoBtn.innerHTML = `▶️ <span id="demoBtnLabel">${currentLang === 'hi' ? 'डेमो मोड (Demo)' : 'Demo Mode'}</span>`;
+      }
+
+      // Append celebration / completion card with PDF and Reminders links
+      appendDemoCompletionCard();
+    }
+
+    function loadDemoScenario() {
+      playDemoMode();
     }
 
     // Fallback Scheme Documents dictionary

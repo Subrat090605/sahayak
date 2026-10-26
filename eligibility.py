@@ -172,14 +172,24 @@ def evaluate_scheme(
         op = rule.get("op", "")
         reason = _format_reason(rule, lang)
 
-        if field not in profile or profile.get(field) is None or profile.get(field) == "":
+        profile_val = profile.get(field) if field in profile else None
+        # Domain rule: Households with annual income > 2.5 Lakhs are income tax assessees and not BPL
+        if field == "bpl_household" and profile_val is None:
+            inc = profile.get("annual_income")
+            if inc is not None:
+                try:
+                    if float(inc) > 250000:
+                        profile_val = False
+                except (ValueError, TypeError):
+                    pass
+
+        if profile_val is None or profile_val == "":
             if field and field not in missing_fields:
                 missing_fields.append(field)
             has_maybe = True
         elif rule_val == "TODO":
             has_maybe = True
         else:
-            profile_val = profile[field]
             passed = _evaluate_op(op, profile_val, rule_val)
             if passed:
                 reasons_met.append(reason)

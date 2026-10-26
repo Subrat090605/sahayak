@@ -8,8 +8,11 @@ Routes per docs/ARCHITECTURE.md:
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +22,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from agents import generate_form_html, generate_ics, verify_document_image
+from agents import eligibility_agent, generate_form_html, generate_ics, verify_document_image
 from coordinator import SESSIONS, get_or_create_session, handle_message
 from eligibility import load_schemes
 
@@ -63,6 +66,23 @@ class UploadDocResponse(BaseModel):
     notes: str = Field(..., description="Analysis notes or friendly guidance for citizen")
 
 
+class DemoLoadRequest(BaseModel):
+    session_id: str | None = Field(default=None, description="Optional session UUID")
+    lang: str | None = Field(default="hi", description="Preferred language ('hi' or 'en')")
+    profile: dict[str, Any] | None = Field(default=None, description="Optional profile fields override")
+
+
+class DemoLoadResponse(BaseModel):
+    status: str = Field(default="ok", description="Status code")
+    session_id: str = Field(..., description="Active session ID")
+    profile: dict[str, Any] = Field(..., description="Loaded sample farmer profile")
+    state: str = Field(..., description="Session state machine state")
+    matches: list[dict[str, Any]] = Field(default_factory=list, description="Scheme matches")
+    reply: str = Field(..., description="Introductory guidance text")
+    trace: list[dict[str, Any]] = Field(default_factory=list, description="Trace entries")
+    demo_steps: list[dict[str, Any]] = Field(default_factory=list, description="Automated demo playback steps")
+
+
 # ---------------------------------------------------------------------------
 # API Routes
 # ---------------------------------------------------------------------------
@@ -72,6 +92,103 @@ class UploadDocResponse(BaseModel):
 def health() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.post("/demo/load", response_model=DemoLoadResponse)
+def demo_load_endpoint(payload: DemoLoadRequest | None = None) -> DemoLoadResponse:
+    """Demo Load Endpoint (per docs/ARCHITECTURE.md & P7.2).
+
+    Loads the sample farmer profile (Unnao, UP, 2 acres, low income) into active session,
+    evaluates scheme eligibility, and returns the profile, initial matches, and scripted steps.
+    """
+    req = payload or DemoLoadRequest()
+    session_id = req.session_id or f"demo-{uuid.uuid4().hex[:8]}"
+    preferred_lang = req.lang or "hi"
+
+    session = get_or_create_session(session_id, lang=preferred_lang)
+
+    sample_profile: dict[str, Any] = {
+        "name": "रामेश कुमार (Ramesh Kumar)",
+        "occupation": "farmer",
+        "state": "Uttar Pradesh",
+        "district": "Unnao",
+        "land_acres": 2.0,
+        "annual_income": 80000,
+        "gender": "male",
+        "age": 42,
+    }
+    if req.profile:
+        sample_profile.update(req.profile)
+
+    session["profile"] = sample_profile
+    session["selected_scheme"] = "pm-kisan"
+    session["state"] = "MATCH"
+    session["lang"] = preferred_lang
+
+    schemes = load_schemes()
+    elig_res = eligibility_agent(
+        profile=sample_profile,
+        schemes=schemes,
+        lang=preferred_lang,
+    )
+    session["matches"] = elig_res.get("matches", [])
+
+    trace = [
+        {
+            "agent": "coordinator",
+            "action": "loaded sample farmer profile (Unnao, 2 acres, income ₹80,000)",
+            "ms": 12,
+        },
+        {
+            "agent": "eligibility",
+            "action": f"evaluated {len(schemes)} schemes: matched {sum(1 for m in session['matches'] if m.get('status') == 'eligible')} eligible",
+            "ms": 25,
+        },
+    ]
+
+    reply = (
+        "नमस्ते रामेश जी! आपका किसान प्रोफाइल सफलतापूर्वक लोड हो गया है। आप पीएम-किसान सम्मान निधि (PM-KISAN) के लिए पात्र हैं।"
+        if preferred_lang == "hi"
+        else "Hello Ramesh! Your sample farmer profile is loaded. You are eligible for PM-KISAN (direct income support)."
+    )
+
+    demo_steps = [
+        {
+            "step": 1,
+            "message_hi": "नमस्ते, मैं उन्नाव का किसान हूँ और मेरे पास 2 एकड़ ज़मीन है।",
+            "message_en": "Hello, I am a farmer in Unnao with two acres of land.",
+            "description": "Farmer intro (occupation & land)",
+        },
+        {
+            "step": 2,
+            "message_hi": "मेरी वार्षिक पारिवारिक आय लगभग 80,000 रुपये है।",
+            "message_en": "My annual family income is around 80,000 rupees.",
+            "description": "Farmer supplies missing income",
+        },
+        {
+            "step": 3,
+            "message_hi": "मुझे पीएम-किसान योजना के लिए कौन से दस्तावेज़ चाहिए?",
+            "message_en": "What documents do I need for PM-KISAN?",
+            "description": "Citizen asks for document checklist & PDF draft",
+        },
+    ]
+
+    return DemoLoadResponse(
+        status="ok",
+        session_id=session_id,
+        profile=sample_profile,
+        state=session["state"],
+        matches=session["matches"],
+        reply=reply,
+        trace=trace,
+        demo_steps=demo_steps,
+    )
+
+
+@app.get("/demo/load", response_model=DemoLoadResponse)
+def demo_load_get_endpoint(session_id: str | None = None, lang: str | None = "hi") -> DemoLoadResponse:
+    """GET alias for /demo/load supporting browser address bar & query testing."""
+    return demo_load_endpoint(DemoLoadRequest(session_id=session_id, lang=lang))
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -90,13 +207,13 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
             matches=result.get("matches", []),
             trace=result.get("trace", []),
         )
-    except Exception as exc:
-        logger.error("Error in /chat endpoint: %s", exc, exc_info=True)
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        logger.error("Timeout in /chat endpoint: %s", exc)
         user_lang = payload.lang or "hi"
         fallback_msg = (
-            "क्षमा करें, नेटवर्क या सेवा में अस्थायी समस्या आई है। कृपया अपना संदेश लिखकर दोबारा प्रयास करें।"
+            "⏱️ अनुरोध का समय समाप्त हो गया (Request Timed Out)। कृपया नीचे लिखकर पुनः प्रयास करें।"
             if user_lang == "hi"
-            else "Sorry, we encountered a temporary service issue. Please try typing your message again."
+            else "⏱️ The request timed out. Please try typing your message again."
         )
         session = get_or_create_session(payload.session_id, lang=user_lang)
         return ChatResponse(
@@ -106,7 +223,39 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
             matches=session.get("matches", []),
             trace=[{
                 "agent": "coordinator",
-                "action": f"friendly error recovery: {type(exc).__name__}",
+                "action": f"friendly timeout error recovery: {type(exc).__name__}",
+                "ms": 0,
+            }],
+        )
+    except Exception as exc:
+        logger.error("Error in /chat endpoint: %s", exc, exc_info=True)
+        user_lang = payload.lang or "hi"
+        err_str = str(exc).lower()
+        is_timeout = "timeout" in err_str or "timed out" in err_str
+        if is_timeout:
+            fallback_msg = (
+                "⏱️ अनुरोध का समय समाप्त हो गया (Request Timed Out)। कृपया नीचे लिखकर पुनः प्रयास करें।"
+                if user_lang == "hi"
+                else "⏱️ The request timed out. Please try typing your message again."
+            )
+            action_desc = f"friendly timeout error recovery: {type(exc).__name__}"
+        else:
+            fallback_msg = (
+                "क्षमा करें, AI मॉडल या सेवा में अस्थायी समस्या आई है। कृपया अपना संदेश लिखकर दोबारा प्रयास करें।"
+                if user_lang == "hi"
+                else "Sorry, we encountered a temporary service issue. Please try typing your message again."
+            )
+            action_desc = f"friendly model error recovery: {type(exc).__name__}"
+
+        session = get_or_create_session(payload.session_id, lang=user_lang)
+        return ChatResponse(
+            reply=fallback_msg,
+            lang=user_lang,
+            state=session.get("state", "COLLECT_PROFILE"),
+            matches=session.get("matches", []),
+            trace=[{
+                "agent": "coordinator",
+                "action": action_desc,
                 "ms": 0,
             }],
         )
