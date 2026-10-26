@@ -15,11 +15,13 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from agents import verify_document_image
-from coordinator import get_or_create_session, handle_message
+from agents import generate_form_html, generate_ics, verify_document_image
+from coordinator import SESSIONS, get_or_create_session, handle_message
+from eligibility import load_schemes
 
 # Load environment variables without exposing secrets
 load_dotenv()
@@ -152,6 +154,10 @@ async def upload_doc_endpoint(
 
         # Update session trace if session exists
         if session is not None:
+            if result.get("matches_checklist") and result.get("matched_doc_id"):
+                verified = session.setdefault("verified_docs", [])
+                if result["matched_doc_id"] not in verified:
+                    verified.append(result["matched_doc_id"])
             trace_entry = {
                 "agent": "document",
                 "action": f"verified {result['doc_type']} (matches={result['matches_checklist']}, readable={result['readable']})",
@@ -185,6 +191,137 @@ async def upload_doc_endpoint(
             notes=fallback_notes,
         )
 
+
+
+# ---------------------------------------------------------------------------
+# Form Generation & Printing Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/form/{scheme_id}", response_class=HTMLResponse)
+def form_endpoint(
+    scheme_id: str,
+    session_id: str | None = None,
+    lang: str | None = None,
+) -> HTMLResponse:
+    """Printable A4 HTML Form endpoint.
+
+    Returns a single-page printable application draft including:
+    - User's profile details pre-filled from active session
+    - Scheme name (Hindi/English) and benefit description
+    - Document checklist with verification tick status [?]
+    - Official government portal link
+    - Mandatory line: "Draft prepared by Sahayak. Submit on the official portal."
+    - Proper A4 print CSS and clean Hindi font rendering via Noto Sans Devanagari.
+    """
+    profile: dict[str, Any] = {}
+    verified_docs: list[str] = []
+    preferred_lang = lang or "hi"
+
+    if session_id and session_id in SESSIONS:
+        session = SESSIONS[session_id]
+        profile = session.get("profile", {})
+        verified_docs = session.get("verified_docs", [])
+        if not lang:
+            preferred_lang = session.get("lang", "hi")
+
+    schemes = load_schemes()
+    html_content = generate_form_html(
+        scheme_id=scheme_id,
+        profile=profile,
+        schemes=schemes,
+        lang=preferred_lang,
+        verified_docs=verified_docs,
+        session_id=session_id,
+    )
+    return HTMLResponse(content=html_content, status_code=200)
+
+
+@app.get("/form", response_class=HTMLResponse)
+def form_query_endpoint(
+    scheme_id: str | None = None,
+    session_id: str | None = None,
+    lang: str | None = None,
+) -> HTMLResponse:
+    """Alternative form endpoint accepting query parameters (e.g. /form?scheme_id=pm-kisan)."""
+    target_scheme = scheme_id
+    if session_id and session_id in SESSIONS and not target_scheme:
+        session = SESSIONS[session_id]
+        target_scheme = session.get("selected_scheme")
+        if not target_scheme and session.get("matches"):
+            eligible = [m["scheme_id"] for m in session["matches"] if m.get("status") == "eligible"]
+            if eligible:
+                target_scheme = eligible[0]
+
+    if not target_scheme:
+        schemes = load_schemes()
+        target_scheme = schemes[0]["id"] if schemes else "pm-kisan"
+
+    return form_endpoint(scheme_id=target_scheme, session_id=session_id, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Calendar Reminders Endpoints (.ics)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/reminders.ics")
+def reminders_ics_endpoint(
+    scheme_id: str | None = None,
+    session_id: str | None = None,
+    lang: str | None = None,
+) -> Response:
+    """Calendar reminders (.ics) endpoint.
+
+    Follows P6.3:
+    Returns an RFC 5545 iCalendar file with reminders at 3 days (collect docs),
+    7 days (submit application), and 30 days (check status).
+    Includes real deadline ONLY if schemes.json contains one; never invents deadlines.
+    """
+    target_scheme = scheme_id
+    preferred_lang = lang or "hi"
+
+    if session_id and session_id in SESSIONS:
+        session = SESSIONS[session_id]
+        if not target_scheme:
+            target_scheme = session.get("selected_scheme")
+            if not target_scheme and session.get("matches"):
+                eligible = [m["scheme_id"] for m in session["matches"] if m.get("status") == "eligible"]
+                if eligible:
+                    target_scheme = eligible[0]
+        if not lang:
+            preferred_lang = session.get("lang", "hi")
+
+    schemes = load_schemes()
+    if not target_scheme:
+        target_scheme = schemes[0]["id"] if schemes else "pm-kisan"
+
+    ics_content = generate_ics(
+        scheme_id=target_scheme,
+        schemes=schemes,
+        lang=preferred_lang,
+        session_id=session_id,
+    )
+
+    filename = f"reminders_{target_scheme}.ics"
+    return Response(
+        content=ics_content,
+        media_type="text/calendar",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@app.get("/reminders/{scheme_id}.ics")
+def reminders_scheme_alias(
+    scheme_id: str,
+    session_id: str | None = None,
+    lang: str | None = None,
+) -> Response:
+    """Direct scheme alias for calendar file (e.g. /reminders/pm-kisan.ics)."""
+    return reminders_ics_endpoint(scheme_id=scheme_id, session_id=session_id, lang=lang)
 
 
 # ---------------------------------------------------------------------------

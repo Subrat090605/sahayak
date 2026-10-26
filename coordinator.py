@@ -11,7 +11,7 @@ import time
 import uuid
 from typing import Any
 
-from agents import document_agent, eligibility_agent, profile_agent
+from agents import document_agent, eligibility_agent, followup_agent, form_agent, profile_agent
 from eligibility import load_schemes
 
 logger = logging.getLogger("sahayak.coordinator")
@@ -44,6 +44,7 @@ def get_or_create_session(session_id: str | None = None, lang: str = "hi") -> di
             "missing": [],
             "matches": [],
             "selected_scheme": None,
+            "verified_docs": [],
             "history": [],
         }
         return SESSIONS[new_id]
@@ -60,6 +61,7 @@ def reset_session(session_id: str, lang: str = "hi") -> dict[str, Any]:
         "missing": [],
         "matches": [],
         "selected_scheme": None,
+        "verified_docs": [],
         "history": [],
     }
     return SESSIONS[session_id]
@@ -118,19 +120,100 @@ def handle_message(
     schemes = load_schemes()
     current_state = session["state"]
 
-    # Check if user expresses document intent or scheme selection
-    is_doc_intent = any(w in message.lower() for w in ["document", "checklist", "कहाँ", "दस्तावेज़", "दस्तावेज", "कागज़", "कागज", "कागजात"])
+    # Check if user expresses document or form intent or scheme selection
+    doc_keywords = ["document", "checklist", "कहाँ", "दस्तावेज़", "दस्तावेज", "कागज़", "कागज", "कागजात"]
+    form_keywords = [
+        "form", "apply", "draft", "print", "download",
+        "आवेदन", "फ़ॉर्म", "फार्म", "ड्राफ्ट", "प्रिंट", "डाउनलोड", "भरना", "भरें"
+    ]
+    is_doc_intent = any(w in message.lower() for w in doc_keywords)
+    is_form_intent = any(w in message.lower() for w in form_keywords)
+    reminder_keywords = [
+        "reminder", "reminders", "calendar", "ics", "schedule", "followup", "follow-up",
+        "\u092f\u093e\u0926", "\u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930", "\u0915\u0948\u0932\u0947\u0902\u0921\u0930", "\u0924\u093e\u0930\u0940\u0916", "\u0924\u093e\u0930\u0940\u0916\u0947\u0902", "\u0924\u093f\u0925\u093f", "\u0938\u092e\u092f"
+    ]
+    is_reminder_intent = any(w in message.lower() for w in reminder_keywords)
+
     matched_scheme_id = None
     for s in schemes:
         s_id = s["id"]
         s_name_en = s.get("name_en", "").lower()
         s_name_hi = s.get("name_hi", "")
-        if s_id in message.lower() or (s_name_en and s_name_en in message.lower()) or (s_name_hi and s_name_hi in message):
+        short_name_en = s_name_en.split("(")[0].strip() if s_name_en else ""
+        short_name_hi = s_name_hi.split("(")[0].strip() if s_name_hi else ""
+
+        if (
+            s_id in message.lower()
+            or (s_name_en and s_name_en in message.lower())
+            or (short_name_en and short_name_en in message.lower())
+            or (s_name_hi and s_name_hi in message)
+            or (short_name_hi and short_name_hi in message)
+        ):
             matched_scheme_id = s_id
             break
 
-    # 2. State: DOCUMENTS or transition from MATCH to DOCUMENTS
-    if current_state == "DOCUMENTS" or (current_state == "MATCH" and (is_doc_intent or matched_scheme_id)):
+    # 2. State: REMINDERS handling (user asks for reminders or calendar)
+    if is_reminder_intent or (current_state == "REMINDERS" and not is_doc_intent and not is_form_intent):
+        target_scheme = matched_scheme_id or session.get("selected_scheme")
+        if not target_scheme:
+            eligible = [m["scheme_id"] for m in session.get("matches", []) if m.get("status") == "eligible"]
+            if eligible:
+                target_scheme = eligible[0]
+            elif schemes:
+                target_scheme = schemes[0]["id"]
+
+        session["selected_scheme"] = target_scheme
+        session["state"] = "REMINDERS"
+
+        t_rem = time.perf_counter()
+        rem_res = followup_agent(
+            scheme_id=target_scheme,
+            schemes=schemes,
+            lang=session["lang"],
+            session_id=session.get("session_id"),
+        )
+        elapsed_rem_ms = int((time.perf_counter() - t_rem) * 1000)
+
+        trace.append({
+            "agent": "followup",
+            "action": f"generated reminders for {target_scheme} (3d, 7d, 30d)",
+            "ms": elapsed_rem_ms,
+        })
+        reply = rem_res["reply"]
+
+    # 3. State: FORM handling (user asks for form or applies)
+    elif is_form_intent or (current_state == "FORM" and not is_doc_intent):
+        target_scheme = matched_scheme_id or session.get("selected_scheme")
+        if not target_scheme:
+            eligible = [m["scheme_id"] for m in session.get("matches", []) if m.get("status") == "eligible"]
+            if eligible:
+                target_scheme = eligible[0]
+            elif schemes:
+                target_scheme = schemes[0]["id"]
+
+        session["selected_scheme"] = target_scheme
+        session["state"] = "FORM"
+
+        t_form = time.perf_counter()
+        form_res = form_agent(
+            scheme_id=target_scheme,
+            profile=session.get("profile", {}),
+            schemes=schemes,
+            lang=session["lang"],
+            verified_docs=session.get("verified_docs", []),
+            session_id=session.get("session_id"),
+        )
+        elapsed_form_ms = int((time.perf_counter() - t_form) * 1000)
+
+        trace.append({
+            "agent": "form",
+            "action": f"generated draft application for {target_scheme}",
+            "ms": elapsed_form_ms,
+        })
+        reply = form_res["reply"]
+
+    # 3. State: DOCUMENTS or transition to DOCUMENTS
+    elif current_state == "DOCUMENTS" or is_doc_intent or (current_state == "MATCH" and matched_scheme_id):
         target_scheme = matched_scheme_id or session.get("selected_scheme")
         if not target_scheme:
             eligible = [m["scheme_id"] for m in session.get("matches", []) if m.get("status") == "eligible"]
@@ -156,9 +239,24 @@ def handle_message(
             "action": f"checklist for {target_scheme} ({len(doc_res['documents'])} items)",
             "ms": elapsed_doc_ms,
         })
-        reply = doc_res["reply"]
 
-    # 3. State: COLLECT_PROFILE or general profile updates
+        session_id_str = session.get("session_id", "")
+        form_url = f"/form/{target_scheme}" + (f"?session_id={session_id_str}&auto_print=true" if session_id_str else "?auto_print=true")
+        reminders_url = f"/reminders.ics?scheme_id={target_scheme}" + (f"&session_id={session_id_str}" if session_id_str else "")
+
+        if session["lang"] == "hi":
+            actions_text = (
+                f"\n\n\U0001f4e5 [\u092f\u0939\u093e\u0901 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0915\u0947 \u0906\u0935\u0947\u0926\u0928 \u092a\u094dरारूप \u0921\u093e\u0909\u0928\u0932\u094b\u0921 \u0915\u0930\u0947ं (Download PDF)]({form_url})\n"
+                f"\U0001f4c5 [\u092f\u0939\u093e\u0901 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0915\u0947 \u0915\u0948\u0932\u0947\u0902\u0921\u0930 \u0930\u093f\u092e\u093eइ\u0902\u0921\u0930 \u0921\u093e\u0909\u0928\u0932\u094b\u0921 \u0915\u0930\u0947ं (Download reminders)]({reminders_url})\n"
+            )
+        else:
+            actions_text = (
+                f"\n\n\U0001f4e5 [Click here to Download PDF Draft]({form_url})\n"
+                f"\U0001f4c5 [Click here to Download reminders (.ics)]({reminders_url})\n"
+            )
+
+        reply = f"{doc_res['reply'].strip()}\n{actions_text}" 
+
     elif current_state in {"COLLECT_PROFILE", "MATCH"}:
         # Step A: Profile Agent extracts fields
         t_prof = time.perf_counter()

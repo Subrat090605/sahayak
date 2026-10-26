@@ -480,6 +480,79 @@
       color: #fbbf24;
     }
 
+    .scheme-btn.pdf-btn {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #ffffff;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+    }
+    .scheme-btn.pdf-btn:hover {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.5);
+    }
+
+    .scheme-btn.ics-btn {
+      background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+      color: #ffffff;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 6px rgba(217, 119, 6, 0.35);
+    }
+    .scheme-btn.ics-btn:hover {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(217, 119, 6, 0.5);
+    }
+
+    .chat-ics-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+      color: #ffffff !important;
+      padding: 6px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.82rem;
+      margin: 6px 0;
+      box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
+      transition: all 0.2s;
+    }
+    .chat-ics-btn:hover {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(217, 119, 6, 0.45);
+    }
+
+    .chat-pdf-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #ffffff !important;
+      padding: 6px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.82rem;
+      margin: 6px 0;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+      transition: all 0.2s;
+    }
+    .chat-pdf-btn:hover {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.45);
+    }
+
+    .chat-link {
+      color: #60a5fa;
+      text-decoration: underline;
+    }
+
     /* Documents Checklist Box on Scheme Cards */
     .docs-checklist-box {
       margin-top: 14px;
@@ -1600,12 +1673,22 @@
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
 
-      // Format markdown line breaks and bold
+      // Format markdown links, bold, line breaks
       let formattedText = escapeHtml(text)
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[(.*?)\]\((.*?)\)/g, function(match, label, href) {
+          if (href.includes('.ics') || label.includes('.ics') || label.includes('Reminders') || label.includes('रिमाइंडर')) {
+            return `__LINK_START__${href}__LINK_SEP__chat-ics-btn__LINK_SEP__📅 ${label}__LINK_END__`;
+          }
+          if (href.includes('auto_print=true') || label.includes('Download PDF') || href.includes('Download PDF')) {
+            return `__LINK_START__${href}__LINK_SEP__chat-pdf-btn__LINK_SEP__📥 ${label}__LINK_END__`;
+          }
+          return `__LINK_START__${href}__LINK_SEP__chat-link__LINK_SEP__${label}__LINK_END__`;
+        })
         .replace(/\n\n/g, '<br><br>')
         .replace(/\n/g, '<br>')
-        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(/__LINK_START__(.*?)__LINK_SEP__(.*?)__LINK_SEP__(.*?)__LINK_END__/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="$2">$3</a>');
 
       bubble.innerHTML = formattedText;
 
@@ -1737,6 +1820,12 @@
                 <button class="scheme-btn secondary" id="btn_docs_${m.scheme_id}" onclick="toggleDocChecklist('${m.scheme_id}', this)" title="Show required documents checklist">
                   📋 What documents do I need?
                 </button>
+                <button class="scheme-btn pdf-btn" id="btn_pdf_${m.scheme_id}" onclick="downloadFormPdf('${m.scheme_id}')" title="${currentLang === 'hi' ? 'आवेदन पत्र प्रारूप खोलें और PDF के रूप में सहेजें' : 'Open form draft and save as PDF'}" style="margin-left: 2px;">
+                  📥 ${currentLang === 'hi' ? 'फ़ॉर्म डाउनलोड (Download PDF)' : 'Download PDF'}
+                </button>
+                <button class="scheme-btn ics-btn" id="btn_reminders_${m.scheme_id}" onclick="downloadRemindersIcs('${m.scheme_id}')" title="${currentLang === 'hi' ? 'कैलेंडर रिमाइंडर डाउनलोड करें (3दिन, 7दिन, 30दिन)' : 'Download calendar reminders (.ics) for 3d, 7d, 30d'}" style="margin-left: 2px;">
+                  📅 ${currentLang === 'hi' ? 'रिमाइंडर (Download reminders)' : 'Download reminders'}
+                </button>
                 <a href="${link}" target="_blank" rel="noopener noreferrer" class="scheme-btn primary">
                   🌐 ${currentLang === 'hi' ? 'आधिकारिक पोर्टल (Official Portal)' : 'Official Portal'}
                 </a>
@@ -1861,6 +1950,23 @@
         { id: 'bank_passbook', name_en: 'Student Bank Account Passbook', name_hi: 'विद्यार्थी का बैंक खाता पासबुक', where_en: 'Student bank branch', where_hi: 'विद्यार्थी की बैंक शाखा' }
       ]
     };
+
+    function downloadRemindersIcs(schemeId) {
+      const sess = sessionId || '';
+      const lang = currentLang || 'hi';
+      const url = `/reminders.ics?scheme_id=${encodeURIComponent(schemeId)}&session_id=${encodeURIComponent(sess)}&lang=${encodeURIComponent(lang)}`;
+      window.location.href = url;
+    }
+
+    function downloadFormPdf(schemeId) {
+      const sess = sessionId || '';
+      const lang = currentLang || 'hi';
+      const url = `/form/${encodeURIComponent(schemeId)}?session_id=${encodeURIComponent(sess)}&lang=${encodeURIComponent(lang)}&auto_print=true`;
+      const win = window.open(url, '_blank');
+      if (win) {
+        win.focus();
+      }
+    }
 
     function toggleDocChecklist(schemeId, btn) {
       const box = document.getElementById(`docs_box_${schemeId}`);

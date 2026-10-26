@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from eligibility import evaluate_all, evaluate_scheme, load_schemes
@@ -839,3 +841,875 @@ Output valid JSON ONLY in this format:
         }
 
 
+# ---------------------------------------------------------------------------
+# Form Agent & Printable A4 Draft HTML Generator
+# ---------------------------------------------------------------------------
+
+FORM_FIELD_LABELS = {
+    "name": {"hi": "आवेदक का नाम (Name)", "en": "Applicant Name"},
+    "age": {"hi": "उम्र (Age)", "en": "Age"},
+    "gender": {"hi": "लिंग (Gender)", "en": "Gender"},
+    "state": {"hi": "राज्य (State)", "en": "State"},
+    "district": {"hi": "ज़िला (District)", "en": "District"},
+    "occupation": {"hi": "व्यवसाय (Occupation)", "en": "Occupation"},
+    "land_acres": {"hi": "खेती योग्य भूमि (Land Holding)", "en": "Agricultural Land (acres)"},
+    "annual_income": {"hi": "वार्षिक आय (Annual Income)", "en": "Family Annual Income"},
+    "bpl_household": {"hi": "बीपीएल श्रेणी (BPL Status)", "en": "BPL Household Status"},
+    "has_lpg_connection": {"hi": "पूर्व गैस कनेक्शन (Existing LPG)", "en": "Existing LPG Connection"},
+    "category": {"hi": "सामाजिक श्रेणी (Category)", "en": "Social Category"},
+    "education_level": {"hi": "शिक्षा स्तर (Education)", "en": "Education Level"},
+}
+
+
+def _format_field_val(key: str, val: Any, lang: str = "hi") -> str:
+    """Format profile field value into user-friendly text."""
+    if val is None or val == "":
+        return "____________________ (खाली / To be filled)"
+    if key == "land_acres":
+        return f"{val} एकड़ ({val} acres)" if lang == "hi" else f"{val} acres"
+    if key == "annual_income":
+        try:
+            return f"₹{int(float(val)):,}"
+        except Exception:
+            return f"₹{val}"
+    if key == "bpl_household":
+        if isinstance(val, bool):
+            return "हाँ / Yes (BPL / Deprived)" if val else "नहीं / No"
+        return str(val)
+    if key == "has_lpg_connection":
+        if isinstance(val, bool):
+            return "हाँ / Yes" if val else "नहीं / No (कोई कनेक्शन नहीं)"
+        return str(val)
+    if key == "gender":
+        g = str(val).strip().lower()
+        if g == "female":
+            return "महिला (Female)" if lang == "hi" else "Female"
+        if g == "male":
+            return "पुरुष (Male)" if lang == "hi" else "Male"
+        return str(val).title()
+    if key == "occupation":
+        o = str(val).strip().lower()
+        if o == "farmer":
+            return "किसान (Farmer)" if lang == "hi" else "Farmer"
+        return str(val).title()
+    return str(val)
+
+
+def generate_form_html(
+    scheme_id: str,
+    profile: dict[str, Any] | None = None,
+    schemes: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    verified_docs: list[str] | None = None,
+    session_id: str | None = None,
+) -> str:
+    """Generate a high-quality, printable single-page A4 HTML application draft.
+    
+    Includes:
+    - User's details (prefilled from profile)
+    - Scheme name & benefit
+    - Document checklist with verification tick status
+    - Official link
+    - Mandatory line: "Draft prepared by Sahayak. Submit on the official portal."
+    - Proper print CSS fitting one A4 page with flawless Hindi font rendering.
+    """
+    if schemes is None:
+        schemes = load_schemes()
+    if profile is None:
+        profile = {}
+    if verified_docs is None:
+        verified_docs = []
+
+    scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+    if not scheme and schemes:
+        scheme = schemes[0]
+        scheme_id = scheme["id"]
+
+    scheme_name_hi = scheme.get("name_hi", scheme_id) if scheme else scheme_id
+    scheme_name_en = scheme.get("name_en", scheme_id) if scheme else scheme_id
+    scheme_name = scheme_name_hi if lang == "hi" else scheme_name_en
+    benefit = scheme.get("benefit_hi" if lang == "hi" else "benefit_en", "") if scheme else ""
+    official_link = scheme.get("official_link", "") if scheme else ""
+    raw_docs = scheme.get("documents", []) if scheme else []
+    scheme_fields = scheme.get("form_fields", []) if scheme else []
+
+    # Order form fields: scheme-specific first, then other available profile fields
+    ordered_keys = list(scheme_fields)
+    for k in ["name", "age", "gender", "state", "district", "occupation", "land_acres", "annual_income"]:
+        if k not in ordered_keys:
+            ordered_keys.append(k)
+
+    # Build 2-column key-value rows
+    field_rows = []
+    pairs = [ordered_keys[i:i + 2] for i in range(0, len(ordered_keys), 2)]
+    for pair in pairs:
+        k1 = pair[0]
+        k2 = pair[1] if len(pair) > 1 else None
+        lbl1 = FORM_FIELD_LABELS.get(k1, {}).get(lang, k1.title())
+        v1 = _format_field_val(k1, profile.get(k1), lang=lang)
+
+        if k2:
+            lbl2 = FORM_FIELD_LABELS.get(k2, {}).get(lang, k2.title())
+            v2 = _format_field_val(k2, profile.get(k2), lang=lang)
+            row_html = f"""
+            <tr>
+              <td class="label-col">{lbl1}</td>
+              <td class="val-col">{v1}</td>
+              <td class="label-col">{lbl2}</td>
+              <td class="val-col">{v2}</td>
+            </tr>
+            """
+        else:
+            row_html = f"""
+            <tr>
+              <td class="label-col">{lbl1}</td>
+              <td class="val-col" colspan="3">{v1}</td>
+            </tr>
+            """
+        field_rows.append(row_html)
+    table_body = "".join(field_rows)
+
+    # Build document checklist rows
+    doc_rows = []
+    for i, d in enumerate(raw_docs, 1):
+        d_id = d.get("id", "")
+        d_name_hi = d.get("name_hi", d_id)
+        d_name_en = d.get("name_en", d_id)
+        d_name = f"{d_name_hi} ({d_name_en})" if lang == "hi" else f"{d_name_en} / {d_name_hi}"
+        where = d.get("where_to_get_hi" if lang == "hi" else "where_to_get_en", "")
+        is_checked = d_id in verified_docs
+        check_symbol = "✔" if is_checked else " "
+        doc_rows.append(f"""
+        <tr>
+          <td class="doc-check">[{check_symbol}]</td>
+          <td style="font-weight: 600; color: #0f172a;">{i}. {d_name}</td>
+          <td style="color: #475569;">📍 {where}</td>
+        </tr>
+        """)
+    doc_table_body = "".join(doc_rows)
+
+    disclaimer = HINDI_DISCLAIMER if lang == "hi" else ENGLISH_DISCLAIMER
+    portal_label = "आधिकारिक पोर्टल" if lang == "hi" else "Official Portal"
+
+    return f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>योजना आवेदन प्रारूप - {scheme_name} | सहायक (Sahayak)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {{
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }}
+    body {{
+      font-family: 'Noto Sans Devanagari', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 20px;
+    }}
+    .toolbar {{
+      max-width: 210mm;
+      margin: 0 auto 16px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    }}
+    .toolbar-title {{
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .toolbar-actions {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }}
+    .toolbar-btn {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      border: none;
+      transition: all 0.2s;
+    }}
+    .btn-print {{
+      background: #10b981;
+      color: #ffffff;
+    }}
+    .btn-print:hover {{
+      background: #059669;
+    }}
+    .btn-portal {{
+      background: #2563eb;
+      color: #ffffff;
+    }}
+    .btn-portal:hover {{
+      background: #1d4ed8;
+    }}
+    .btn-back {{
+      background: rgba(255,255,255,0.15);
+      color: #f1f5f9;
+    }}
+    .btn-back:hover {{
+      background: rgba(255,255,255,0.25);
+    }}
+    .page {{
+      width: 210mm;
+      min-height: 297mm;
+      padding: 12mm 15mm;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      position: relative;
+      border: 1px solid #e2e8f0;
+    }}
+    .gov-header {{
+      text-align: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }}
+    .emblem-line {{
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      letter-spacing: 1px;
+    }}
+    .gov-title {{
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }}
+    .form-title {{
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #1e3a8a;
+      margin-top: 2px;
+    }}
+    .draft-badge {{
+      display: inline-block;
+      background: #fee2e2;
+      border: 1px solid #ef4444;
+      color: #b91c1c;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1px 8px;
+      border-radius: 12px;
+      margin-top: 3px;
+    }}
+    .mandate-notice {{
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-left: 4px solid #2563eb;
+      padding: 6px 10px;
+      margin: 6px 0 8px 0;
+      font-size: 11.5px;
+      color: #1e40af;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+    .scheme-info-box {{
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+    }}
+    .scheme-name {{
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }}
+    .scheme-benefit {{
+      font-size: 11px;
+      color: #334155;
+      margin-top: 2px;
+    }}
+    .section-heading {{
+      font-size: 11.5px;
+      font-weight: 700;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 3px 8px;
+      border-left: 3px solid #1e3a8a;
+      margin: 8px 0 4px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }}
+    .details-table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 6px;
+    }}
+    .details-table td {{
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 11px;
+      vertical-align: middle;
+    }}
+    .details-table .label-col {{
+      width: 25%;
+      font-weight: 600;
+      background: #f8fafc;
+      color: #334155;
+    }}
+    .details-table .val-col {{
+      width: 25%;
+      color: #0f172a;
+      font-weight: 500;
+    }}
+    .doc-table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 6px;
+    }}
+    .doc-table th, .doc-table td {{
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 10.5px;
+    }}
+    .doc-table th {{
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #334155;
+      text-align: left;
+    }}
+    .doc-check {{
+      width: 32px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #16a34a;
+    }}
+    .disclaimer-box {{
+      border-top: 1px dashed #94a3b8;
+      margin-top: 6px;
+      padding-top: 6px;
+      font-size: 10px;
+      color: #64748b;
+      line-height: 1.35;
+    }}
+    .signature-area {{
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 6px;
+    }}
+    .sig-box {{
+      text-align: center;
+      font-size: 10.5px;
+      color: #334155;
+      border-top: 1px dotted #64748b;
+      width: 44%;
+      padding-top: 3px;
+    }}
+    @page {{
+      size: A4 portrait;
+      margin: 8mm 12mm 8mm 12mm;
+    }}
+    @media print {{
+      body {{
+        background: #ffffff !important;
+        padding: 0 !important;
+        font-size: 10pt !important;
+      }}
+      .toolbar {{
+        display: none !important;
+      }}
+      .page {{
+        width: 100% !important;
+        min-height: auto !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }}
+      tr, td, th {{
+        page-break-inside: avoid !important;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <div class="toolbar-title">
+      📄 <span>{scheme_name} — आवेदन प्रारूप (Draft Form)</span>
+    </div>
+    <div class="toolbar-actions">
+      <button class="toolbar-btn btn-print" id="download-pdf-btn" onclick="window.print()">
+        📥 Download PDF / प्रिंट
+      </button>
+      <a href="{official_link}" target="_blank" rel="noopener noreferrer" class="toolbar-btn btn-portal">
+        🌐 {portal_label}
+      </a>
+      <a href="/" class="toolbar-btn btn-back">
+        ← वापस (Back)
+      </a>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="gov-header">
+      <div class="emblem-line">भारत सरकार / GOVERNMENT OF INDIA</div>
+      <div class="gov-title">योजना आवेदन प्रारूप (प्रारंभिक ड्राफ्ट)</div>
+      <div class="form-title">{scheme_name_hi} / {scheme_name_en}</div>
+      <div class="draft-badge">DRAFT / गैर-आधिकारिक प्रारूप</div>
+    </div>
+
+    <div class="mandate-notice">
+      <div>
+        <span>📌 Draft prepared by Sahayak. Submit on the official portal.</span>
+        <div style="font-size: 10.5px; opacity: 0.9; margin-top: 1px;">सहायक (Sahayak) द्वारा तैयार किया गया प्रारूप। कृपया आधिकारिक पोर्टल पर जमा करें।</div>
+      </div>
+      <div style="font-size: 11px; font-weight: normal;">
+        दिनांक: {time.strftime('%d/%m/%Y')}
+      </div>
+    </div>
+
+    <div class="scheme-info-box">
+      <div class="scheme-name">🎯 योजना का नाम: {scheme_name}</div>
+      <div class="scheme-benefit">💡 लाभ: {benefit}</div>
+      <div style="font-size: 11px; color: #2563eb; margin-top: 2px;">
+        🔗 आधिकारिक पोर्टल: <a href="{official_link}" target="_blank" rel="noopener noreferrer" style="color: #2563eb;">{official_link}</a>
+      </div>
+    </div>
+
+    <div class="section-heading">1. आवेदक का विवरण (Applicant Profile Details)</div>
+    <table class="details-table">
+      <tbody>
+        {table_body}
+      </tbody>
+    </table>
+
+    <div class="section-heading">2. आवश्यक दस्तावेज़ चेकलिस्ट (Required Documents Checklist)</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width: 32px; text-align: center;">स्थिति</th>
+          <th>दस्तावेज़ का नाम (Document Name)</th>
+          <th>कहाँ से प्राप्त करें (Where to Obtain)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {doc_table_body}
+      </tbody>
+    </table>
+
+    <div class="section-heading">3. घोषणा एवं निर्देश (Declaration & Guidelines)</div>
+    <div style="font-size: 10.5px; color: #334155; line-height: 1.35;">
+      1. मैं प्रमाणित करता/करती हूँ कि ऊपर दी गई समस्त जानकारी मेरे सर्वोत्तम ज्ञान के अनुसार सत्य और सही है।<br>
+      2. <strong>यह केवल प्रारंभिक आवेदन ड्राफ्ट है।</strong> पात्रता सत्यापन और अंतिम आवेदन केवल आधिकारिक पोर्टल (<a href="{official_link}" target="_blank">{official_link}</a>) या अधिकृत केंद्र पर ही मान्य होगा।
+    </div>
+
+    <div class="signature-area">
+      <div class="sig-box">
+        दिनांक व स्थान (Date & Place)
+      </div>
+      <div class="sig-box">
+        आवेदक के हस्ताक्षर / अंगूठे का निशान<br>
+        (Applicant's Signature / Thumb Impression)
+      </div>
+    </div>
+
+    <div class="disclaimer-box">
+      ℹ️ <strong>महत्वपूर्ण सूचना:</strong> {disclaimer}
+    </div>
+  </div>
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {{
+      try {{
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('print') === 'true' || params.get('auto_print') === 'true' || window.location.hash === '#print') {{
+          setTimeout(function() {{
+            window.print();
+          }}, 400);
+        }}
+      }} catch (e) {{
+        console.error('Auto-print error:', e);
+      }}
+    }});
+  </script>
+</body>
+</html>"""
+
+
+def form_agent(
+    scheme_id: str,
+    profile: dict[str, Any] | None = None,
+    schemes: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    verified_docs: list[str] | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    """Form Agent:
+    Builds a pre-filled draft application form for the chosen scheme,
+    including applicant details, document checklist, official link,
+    and the mandatory 'Draft prepared by Sahayak. Submit on the official portal.' notice.
+
+    Returns:
+        dict:
+            "scheme_id": str,
+            "scheme_name": str,
+            "official_link": str,
+            "benefit": str,
+            "reply": str,
+            "html": str,
+            "form_url": str,
+    """
+    if schemes is None:
+        schemes = load_schemes()
+    if profile is None:
+        profile = {}
+
+    scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+    disclaimer = HINDI_DISCLAIMER if lang == "hi" else ENGLISH_DISCLAIMER
+
+    if not scheme and schemes:
+        scheme = schemes[0]
+        scheme_id = scheme["id"]
+
+    scheme_name = scheme.get("name_hi" if lang == "hi" else "name_en", scheme_id) if scheme else scheme_id
+    official_link = scheme.get("official_link", "") if scheme else ""
+    benefit = scheme.get("benefit_hi" if lang == "hi" else "benefit_en", "") if scheme else ""
+
+    html = generate_form_html(
+        scheme_id=scheme_id,
+        profile=profile,
+        schemes=schemes,
+        lang=lang,
+        verified_docs=verified_docs,
+        session_id=session_id,
+    )
+
+    form_url = f"/form/{scheme_id}" + (f"?session_id={session_id}" if session_id else "")
+    sep = "&" if "?" in form_url else "?"
+    pdf_url = f"{form_url}{sep}auto_print=true"
+    reminders_url = f"/reminders.ics?scheme_id={scheme_id}" + (f"&session_id={session_id}" if session_id else "")
+
+    if lang == "hi":
+        reply = (
+            f"**{scheme_name}** के लिए आपका आवेदन प्रारूप (Draft Form) तैयार कर दिया गया है।\n\n"
+            f"📥 [यहाँ क्लिक करके आवेदन पत्र डाउनलोड करें (Download PDF)]({pdf_url})\n" + f"📄 [यहाँ क्लिक करके आवेदन प्रारूप देखें व प्रिंट करें]({form_url})\n\n"
+            f"📅 [\u092f\u0939\u093e\u0901 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0915\u0947 \u0915\u0948\u0932\u0947\u0902\u0921\u0930 \u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930 \u0921\u093e\u0909\u0928\u0932\u094b\u0921 \u0915\u0930\u0947\u0902 (Download reminders)]({reminders_url})\n\n" + f"📌 Draft prepared by Sahayak. Submit on the official portal.\n"
+            f"सहायक (Sahayak) द्वारा तैयार किया गया प्रारूप। कृपया आधिकारिक पोर्टल पर जमा करें।\n\n"
+            f"आधिकारिक पोर्टल: {official_link}\n\n"
+            f"{disclaimer}"
+        )
+    else:
+        reply = (
+            f"Your application draft for **{scheme_name}** has been prepared.\n\n"
+            f"📥 [Click here to Download PDF Draft]({pdf_url})\n" + f"📄 [Click here to view and print your Application Draft]({form_url})\n\n"
+            f"📅 [Click here to Download reminders (.ics)]({reminders_url})\n\n" + f"📌 Draft prepared by Sahayak. Submit on the official portal.\n\n"
+            f"Official portal: {official_link}\n\n"
+            f"{disclaimer}"
+        )
+
+    return {
+        "scheme_id": scheme_id,
+        "scheme_name": scheme_name,
+        "official_link": official_link,
+        "benefit": benefit,
+        "reply": reply,
+        "html": html,
+        "form_url": form_url,
+        "pdf_url": pdf_url,
+    }
+
+
+
+def generate_ics(
+    scheme_id: str,
+    schemes: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    now: datetime | None = None,
+    session_id: str | None = None,
+) -> str:
+    """Generate an RFC 5545 compliant iCalendar (.ics) string with scheme reminders.
+
+    Follows P6.3:
+    - Reminders at 3 days (collecting documents), 7 days (submitting), 30 days (checking status).
+    - Includes a real deadline event ONLY if schemes.json contains one; never invents deadlines.
+    """
+    if schemes is None:
+        schemes = load_schemes()
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+    if not scheme and schemes:
+        scheme = schemes[0]
+        scheme_id = scheme["id"]
+
+    scheme_name_hi = scheme.get("name_hi", scheme_id) if scheme else scheme_id
+    scheme_name_en = scheme.get("name_en", scheme_id) if scheme else scheme_id
+    scheme_name = scheme_name_hi if lang == "hi" else scheme_name_en
+    official_link = scheme.get("official_link", "") if scheme else ""
+    raw_deadline = scheme.get("deadline") if scheme else None
+    deadline_val = str(raw_deadline).strip() if (raw_deadline and str(raw_deadline).strip().upper() not in {"TODO", "NONE", "NULL", ""}) else None
+
+    # Calculate reminder dates
+    d3 = now + timedelta(days=3)
+    d7 = now + timedelta(days=7)
+    d30 = now + timedelta(days=30)
+    dtstamp = now.strftime("%Y%m%dT%H%M%SZ")
+
+    def _make_vevent(uid: str, dt_start: datetime, summary: str, description: str) -> str:
+        date_str = dt_start.strftime("%Y%m%d")
+        next_date_str = (dt_start + timedelta(days=1)).strftime("%Y%m%d")
+        desc_escaped = description.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+        summ_escaped = summary.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+        vevent_lines = [
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTAMP:{dtstamp}",
+            f"DTSTART;VALUE=DATE:{date_str}",
+            f"DTEND;VALUE=DATE:{next_date_str}",
+            f"SUMMARY:{summ_escaped}",
+            f"DESCRIPTION:{desc_escaped}",
+            "STATUS:CONFIRMED",
+            "TRANSP:TRANSPARENT",
+            "BEGIN:VALARM",
+            "TRIGGER:-PT9H",
+            "ACTION:DISPLAY",
+            f"DESCRIPTION:{summ_escaped}",
+            "END:VALARM",
+            "END:VEVENT",
+        ]
+        return "\r\n".join(vevent_lines) + "\r\n"
+
+    events: list[str] = []
+
+    # 1. Day 3: Collect documents
+    summ_3d = f"\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u090f\u0915\u0924\u094d\u0930 \u0915\u0930\u0947\u0902 \u2014 {scheme_name}" if lang == "hi" else f"Collect Documents \u2014 {scheme_name}"
+    desc_3d = (
+        f"\u091a\u0947\u0915\u0932\u093f\u0938\u094d\u091f \u0915\u0947 \u0905\u0928\u0941\u0938\u093e\u0930 \u0938\u092d\u0940 \u0906\u0935\u0936\u094d\u092f\u0915 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u090f\u0915\u0924\u094d\u0930 \u0915\u0930\u0947\u0902\u0964\n"
+        f"\u092f\u094b\u091c\u0928\u093e: {scheme_name}\n"
+        f"\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932: {official_link}\n\n"
+        f"Draft prepared by Sahayak. Verify on the official portal."
+        if lang == "hi"
+        else
+        f"Collect all required checklist documents for {scheme_name}.\n"
+        f"Official portal: {official_link}\n\n"
+        f"Draft prepared by Sahayak. Verify on the official portal."
+    )
+    events.append(_make_vevent(
+        uid=f"sahayak-{scheme_id}-3d-{d3.strftime('%Y%m%d')}@sahayak.gov.in",
+        dt_start=d3,
+        summary=summ_3d,
+        description=desc_3d,
+    ))
+
+    # 2. Day 7: Submit application
+    summ_7d = f"\u0906\u0935\u0947\u0926\u0928 \u091c\u092e\u093e \u0915\u0930\u0947\u0902 \u2014 {scheme_name}" if lang == "hi" else f"Submit Application \u2014 {scheme_name}"
+    desc_7d = (
+        f"\u0924\u0948\u092f\u093e\u0930 \u0915\u093f\u092f\u093e \u0917\u092f\u093e \u0906\u0935\u0947\u0926\u0928 \u092a\u0924\u094d\u0930 \u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932 \u092f\u093e \u0928\u093f\u0915\u091f\u0924\u092e \u0938\u0940\u090f\u0938\u0938\u0940 \u092a\u0930 \u091c\u092e\u093e \u0915\u0930\u0947\u0902\u0964\n"
+        f"\u092f\u094b\u091c\u0928\u093e: {scheme_name}\n"
+        f"\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932: {official_link}\n\n"
+        f"Draft prepared by Sahayak. Submit on the official portal."
+        if lang == "hi"
+        else
+        f"Submit your completed application draft on the official portal or nearest CSC.\n"
+        f"Official portal: {official_link}\n\n"
+        f"Draft prepared by Sahayak. Submit on the official portal."
+    )
+    events.append(_make_vevent(
+        uid=f"sahayak-{scheme_id}-7d-{d7.strftime('%Y%m%d')}@sahayak.gov.in",
+        dt_start=d7,
+        summary=summ_7d,
+        description=desc_7d,
+    ))
+
+    # 3. Day 30: Check application status
+    summ_30d = f"\u0906\u0935\u0947\u0926\u0928 \u0938\u094d\u0925\u093f\u0924\u093f \u091c\u093e\u0901\u091a\u0947\u0902 \u2014 {scheme_name}" if lang == "hi" else f"Check Application Status \u2014 {scheme_name}"
+    desc_30d = (
+        f"\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932 \u092a\u0930 \u0905\u092a\u0928\u093e \u0906\u0935\u0947\u0926\u0928 \u0915\u094d\u0930\u092e\u093e\u0902\u0915 \u092f\u093e \u0906\u0927\u093e\u0930 \u0928\u0902\u092c\u0930 \u0921\u093e\u0932\u0915\u0930 \u0938\u094d\u0925\u093f\u0924\u093f \u0915\u0940 \u091c\u093e\u0901\u091a \u0915\u0930\u0947\u0902\u0964\n"
+        f"\u092f\u094b\u091c\u0928\u093e: {scheme_name}\n"
+        f"\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932: {official_link}\n\n"
+        f"Verify on the official portal."
+        if lang == "hi"
+        else
+        f"Check your application status on the official portal using your reference or Aadhaar number.\n"
+        f"Official portal: {official_link}\n\n"
+        f"Verify on the official portal."
+    )
+    events.append(_make_vevent(
+        uid=f"sahayak-{scheme_id}-30d-{d30.strftime('%Y%m%d')}@sahayak.gov.in",
+        dt_start=d30,
+        summary=summ_30d,
+        description=desc_30d,
+    ))
+
+    # 4. Real deadline ONLY if in schemes.json; never invent
+    if deadline_val:
+        try:
+            dl_dt = datetime.strptime(str(deadline_val)[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            summ_dl = f"\u26a0\ufe0f \u0905\u0902\u0924\u093f\u092e \u0924\u093f\u0925\u093f (Deadline) \u2014 {scheme_name}" if lang == "hi" else f"\u26a0\ufe0f Application Deadline \u2014 {scheme_name}"
+            desc_dl = (
+                f"\u092f\u094b\u091c\u0928\u093e \u0906\u0935\u0947\u0926\u0928 \u0915\u0940 \u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u0905\u0902\u0924\u093f\u092e \u0924\u093f\u0925\u093f: {deadline_val}\n"
+                f"\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932: {official_link}\n\n"
+                f"\u0915\u0943\u092a\u092f\u093e \u0938\u092e\u092f \u0930\u0939\u0924\u0947 \u0906\u0935\u0947\u0926\u0928 \u092a\u0942\u0930\u094d\u0923 \u0915\u0930\u0947\u0902\u0964"
+                if lang == "hi"
+                else
+                f"Official application deadline: {deadline_val}\n"
+                f"Official portal: {official_link}\n\n"
+                f"Please complete and submit your application before this deadline."
+            )
+            events.append(_make_vevent(
+                uid=f"sahayak-{scheme_id}-deadline-{dl_dt.strftime('%Y%m%d')}@sahayak.gov.in",
+                dt_start=dl_dt,
+                summary=summ_dl,
+                description=desc_dl,
+            ))
+        except Exception:
+            pass
+
+    header_lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Sahayak Citizen Scheme Assistant//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:Sahayak - {scheme_name}",
+    ]
+    return "\r\n".join(header_lines) + "\r\n" + "".join(events) + "END:VCALENDAR\r\n"
+
+
+def followup_agent(
+    scheme_id: str,
+    schemes: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    session_id: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Follow-up Agent:
+    Builds follow-up reminders (3 days, 7 days, 30 days) and calendar (.ics) file.
+    Uses real deadline ONLY if schemes.json contains one; never invents deadlines.
+
+    Returns:
+        dict:
+            "scheme_id": str,
+            "scheme_name": str,
+            "official_link": str,
+            "reminders": list[dict],
+            "deadline": str | None,
+            "ics_content": str,
+            "ics_url": str,
+            "reply": str,
+    """
+    if schemes is None:
+        schemes = load_schemes()
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+    if not scheme and schemes:
+        scheme = schemes[0]
+        scheme_id = scheme["id"]
+
+    scheme_name_hi = scheme.get("name_hi", scheme_id) if scheme else scheme_id
+    scheme_name_en = scheme.get("name_en", scheme_id) if scheme else scheme_id
+    scheme_name = scheme_name_hi if lang == "hi" else scheme_name_en
+    official_link = scheme.get("official_link", "") if scheme else ""
+    raw_deadline = scheme.get("deadline") if scheme else None
+    deadline_val = str(raw_deadline).strip() if (raw_deadline and str(raw_deadline).strip().upper() not in {"TODO", "NONE", "NULL", ""}) else None
+
+    d3 = now + timedelta(days=3)
+    d7 = now + timedelta(days=7)
+    d30 = now + timedelta(days=30)
+
+    reminders = [
+        {
+            "days": 3,
+            "date": d3.strftime("%Y-%m-%d"),
+            "display_date": d3.strftime("%d/%m/%Y"),
+            "action": "\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u090f\u0915\u0924\u094d\u0930 \u0915\u0930\u0947\u0902" if lang == "hi" else "Collect required checklist documents",
+            "type": "collect_docs",
+        },
+        {
+            "days": 7,
+            "date": d7.strftime("%Y-%m-%d"),
+            "display_date": d7.strftime("%d/%m/%Y"),
+            "action": "\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932 \u092a\u0930 \u0906\u0935\u0947\u0926\u0928 \u091c\u092e\u093e \u0915\u0930\u0947\u0902" if lang == "hi" else "Submit application draft on official portal",
+            "type": "submit_application",
+        },
+        {
+            "days": 30,
+            "date": d30.strftime("%Y-%m-%d"),
+            "display_date": d30.strftime("%d/%m/%Y"),
+            "action": "\u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932 \u092a\u0930 \u0938\u094d\u0925\u093f\u0924\u093f \u091c\u093e\u0901\u091a\u0947\u0902" if lang == "hi" else "Check application status on official portal",
+            "type": "check_status",
+        },
+    ]
+
+    ics_content = generate_ics(
+        scheme_id=scheme_id,
+        schemes=schemes,
+        lang=lang,
+        now=now,
+        session_id=session_id,
+    )
+
+    ics_url = f"/reminders.ics?scheme_id={scheme_id}" + (f"&session_id={session_id}" if session_id else "")
+    form_url = f"/form/{scheme_id}" + (f"?session_id={session_id}&auto_print=true" if session_id else "?auto_print=true")
+    disclaimer = HINDI_DISCLAIMER if lang == "hi" else ENGLISH_DISCLAIMER
+
+    if lang == "hi":
+        deadline_text = f"\u26a0\ufe0f \u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u0905\u0902\u0924\u093f\u092e \u0924\u093f\u0925\u093f (Official Deadline): {deadline_val}\n" if deadline_val else "\u2139\ufe0f \u0907\u0938 \u092f\u094b\u091c\u0928\u093e \u0915\u0947 \u0932\u093f\u090f \u0915\u094b\u0908 \u0928\u093f\u0936\u094d\u091a\u093f\u0924 \u0905\u0902\u0924\u093f\u092e \u0924\u093f\u0925\u093f \u0928\u093f\u0930\u094d\u0927\u093e\u0930\u093f\u0924 \u0928\u0939\u0940\u0902 \u0939\u0948 (\u0906\u0935\u0947\u0926\u0928 \u0916\u0941\u0932\u093e \u0939\u0948)\u0964\n"
+        reply = (
+            f"**{scheme_name}** \u0915\u0947 \u0932\u093f\u090f \u0906\u092a\u0915\u0940 \u092b\u0949\u0932\u094b-\u0905\u092a \u091a\u0947\u0915\u0932\u093f\u0938\u094d\u091f \u0914\u0930 \u0915\u0948\u0932\u0947\u0902\u0921\u0930 \u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930 \u0924\u0948\u092f\u093e\u0930 \u0939\u0948\u0902:\n\n"
+            f"\U0001f4c5 **\u092b\u0949\u0932\u094b-\u0905\u092a \u0938\u092e\u092f-\u0938\u093e\u0930\u0923\u0940 (Follow-up Schedule):**\n"
+            f"1. **3 \u0926\u093f\u0928 \u092c\u093e\u0926 ({d3.strftime('%d/%m/%Y')}):** \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u090f\u0915\u0924\u094d\u0930 \u0915\u0930\u0947\u0902\n"
+            f"2. **7 \u0926\u093f\u0928 \u092c\u093e\u0926 ({d7.strftime('%d/%m/%Y')}):** \u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932 \u092a\u0930 \u0906\u0935\u0947\u0926\u0928 \u091c\u092e\u093e \u0915\u0930\u0947\u0902\n"
+            f"3. **30 \u0926\u093f\u0928 \u092c\u093e\u0926 ({d30.strftime('%d/%m/%Y')}):** \u0906\u0935\u0947\u0926\u0928 \u0915\u0940 \u0938\u094d\u0925\u093f\u0924\u093f \u0915\u0940 \u091c\u093e\u0901\u091a \u0915\u0930\u0947\u0902\n\n"
+            f"{deadline_text}\n"
+            f"\U0001f4e5 [\u092f\u0939\u093e\u0901 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0915\u0947 \u0915\u0948\u0932\u0947\u0902\u0921\u0930 \u0930\u093f\u092e\u093e\u0907\u0902\u0921\u0930 \u0921\u093e\u0909\u0928\u0932\u094b\u0921 \u0915\u0930\u0947\u0902 (Download Reminders .ics)]({ics_url})\n\n"
+            f"📥 [\u092f\u0939\u093e\u0901 \u0915\u094d\u0932\u093f\u0915 \u0915\u0930\u0915\u0947 \u0906\u0935\u0947\u0926\u0928 \u092a\u094d\u0930ारूप \u0921\u093e\u0909\u0928\u0932\u094b\u0921 \u0915\u0930\u0947ं (Download PDF)]({form_url})\n\n" + f"\U0001f517 \u0906\u0927\u093f\u0915\u093e\u0930\u093f\u0915 \u092a\u094b\u0930\u094d\u091f\u0932: {official_link}\n\n"
+            f"{disclaimer}"
+        )
+    else:
+        deadline_text = f"\u26a0\ufe0f Official Application Deadline: {deadline_val}\n" if deadline_val else "\u2139\ufe0f No fixed deadline in official records (applications remain open).\n"
+        reply = (
+            f"Here are your follow-up reminders for **{scheme_name}**:\n\n"
+            f"\U0001f4c5 **Follow-up Timeline:**\n"
+            f"1. **In 3 days ({d3.strftime('%d/%m/%Y')}):** Collect required checklist documents\n"
+            f"2. **In 7 days ({d7.strftime('%d/%m/%Y')}):** Submit application draft on the official portal\n"
+            f"3. **In 30 days ({d30.strftime('%d/%m/%Y')}):** Check application status on official portal\n\n"
+            f"{deadline_text}\n"
+            f"\U0001f4e5 [Click here to Download Calendar Reminders (.ics)]({ics_url})\n\n"
+            f"📥 [Click here to Download PDF Draft]({form_url})\n\n" + f"\U0001f517 Official portal: {official_link}\n\n"
+            f"{disclaimer}"
+        )
+
+    return {
+        "scheme_id": scheme_id,
+        "scheme_name": scheme_name,
+        "official_link": official_link,
+        "reminders": reminders,
+        "deadline": deadline_val,
+        "ics_content": ics_content,
+        "ics_url": ics_url,
+        "reply": reply,
+    }
