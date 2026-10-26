@@ -9,6 +9,7 @@ flowchart TD
     UI -->|GET /form/{id}| API_FORM["/form/{scheme_id}"]
     UI -->|GET /reminders.ics| API_REM["/reminders.ics"]
     UI -->|POST /demo/load| API_DEMO["/demo/load"]
+    UI -->|POST /transcribe| API_TRANSCRIBE["/transcribe"]
   end
 
   subgraph Server ["FastAPI Application (main.py)"]
@@ -17,6 +18,7 @@ flowchart TD
     API_FORM --> AG_FORM["Form Agent<br/>(A4 Printable HTML Draft)"]
     API_REM --> AG_REM["Follow-up Agent<br/>(RFC 5545 .ics Calendar)"]
     API_DEMO --> COORD
+    API_TRANSCRIBE --> GROQ_STT["Groq Whisper STT (whisper-large-v3-turbo)"]
 
     subgraph Agents ["Multi-Agent System (agents.py)"]
       COORD -->|1. Extract profile| AG_PROF["Profile Agent<br/>(Field Extraction & Sanitization)"]
@@ -95,6 +97,7 @@ The `Coordinator` in `coordinator.py` manages multi-turn dialogs and state trans
 | `GET` | `/form/{scheme_id}` | Query: `session_id`, `lang`, `auto_print` | `text/html` (Printable A4) | Single-page printable application draft with auto-print trigger. |
 | `GET` | `/reminders.ics` | Query: `scheme_id`, `session_id`, `lang` | `text/calendar` (RFC 5545) | Calendar reminder schedule (3-day, 7-day, 30-day). |
 | `POST` | `/demo/load` | `{session_id, lang, profile}` | `{status, session_id, profile, state, matches, reply, trace, demo_steps}` | Preloads sample Unnao farmer profile and returns scripted playback turns. |
+| `POST` | `/transcribe` | `multipart/form-data` (file, lang) | `{"text": str, "status": "ok", "error": null}` | Accepts short audio recording (MediaRecorder), sends to Groq Whisper STT from `.env` (`GROQ_STT_MODEL`), returns transcribed text. |
 
 ## Live Trace Format
 Each turn returns a transparent log of agent actions displayed in the UI side panel:

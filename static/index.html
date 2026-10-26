@@ -924,6 +924,95 @@
       display: flex;
     }
 
+    
+    /* Speech Recognition Mode Toggle Bar */
+    .speech-toggle-bar {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 20px;
+      margin-bottom: 2px;
+      transition: all 0.2s ease;
+    }
+
+    .speech-toggle-bar:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .speech-toggle-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      color: var(--text-main);
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+
+    .speech-toggle-label input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .speech-toggle-slider {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 18px;
+      background-color: rgba(255, 255, 255, 0.18);
+      border-radius: 18px;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .speech-toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #f3f4f6;
+      border-radius: 50%;
+      transition: all 0.25s ease;
+    }
+
+    .speech-toggle-label input:checked + .speech-toggle-slider {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    }
+
+    .speech-toggle-label input:checked + .speech-toggle-slider:before {
+      transform: translateX(16px);
+      background-color: #ffffff;
+    }
+
+    .speech-toggle-badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.2s ease;
+    }
+
+    .speech-toggle-badge.active-groq {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.35);
+      font-weight: 600;
+    }
+
     /* Bottom Input Controls Bar */
     .controls-bar {
       background: rgba(10, 14, 23, 0.95);
@@ -1382,6 +1471,297 @@
       if (input) input.focus();
     }
 
+    
+    // -------------------------------------------------------------------------
+    // Server Speech Recognition State & MediaRecorder Logic (Groq Whisper STT)
+    // -------------------------------------------------------------------------
+    let isServerSpeechMode = false;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let mediaStream = null;
+    let isRecordingServerAudio = false;
+    let serverAudioTimeout = null;
+
+    function handleSpeechToggleChange() {
+      const toggle = document.getElementById('toggleServerSpeech');
+      isServerSpeechMode = !!(toggle && toggle.checked);
+      const badge = document.getElementById('speechToggleBadge');
+      const micBtn = document.getElementById('micBtn');
+
+      // Cleanly stop any ongoing listening or recording
+      stopListening();
+      if (isRecordingServerAudio) {
+        stopServerAudioRecording(false);
+      }
+
+      if (isServerSpeechMode) {
+        if (badge) {
+          badge.textContent = '⚡ Groq Whisper STT';
+          badge.classList.add('active-groq');
+        }
+        if (micBtn) {
+          micBtn.classList.remove('unsupported');
+          micBtn.setAttribute('title', currentLang === 'hi' 
+            ? 'माइक दबाकर बोलें (सर्वर पहचान: Groq Whisper)' 
+            : 'Click to record audio for Groq Whisper transcription');
+        }
+        updateStatusCaption(currentLang === 'hi'
+          ? 'माइक दबाकर बोलें • सर्वर वाक् पहचान (Groq Whisper) सक्रिय'
+          : 'Click mic to record • Server Speech Recognition (Groq Whisper) active');
+      } else {
+        if (badge) {
+          badge.textContent = currentLang === 'hi' ? 'ब्राउज़र डिफ़ॉल्ट' : 'Browser Default';
+          badge.classList.remove('active-groq');
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition && micBtn) {
+          micBtn.classList.add('unsupported');
+          micBtn.setAttribute('title', currentLang === 'hi' 
+            ? 'आपके ब्राउज़र में आवाज़ पहचान समर्थित नहीं है (ऊपर सर्वर पहचान चालू करें)' 
+            : 'Browser Speech API not supported (toggle server recognition above)');
+        } else if (micBtn) {
+          micBtn.classList.remove('unsupported');
+          micBtn.setAttribute('title', currentLang === 'hi' 
+            ? 'माइक दबाकर बोलें (ब्राउज़र वाक् पहचान)' 
+            : 'Click to speak (Browser Web Speech API)');
+        }
+        updateStatusCaption(currentLang === 'hi'
+          ? 'माइक दबाकर बोलें या लिखकर भेजें • Powered by Deterministic Rules & Multi-Agent AI'
+          : 'Tap mic to speak or type message • Powered by Deterministic Rules & Multi-Agent AI');
+      }
+    }
+
+    function handleMicClick() {
+      if (isServerSpeechMode) {
+        toggleServerAudioRecording();
+      } else {
+        toggleVoiceInput();
+      }
+    }
+
+    async function toggleServerAudioRecording() {
+      if (isRecordingServerAudio) {
+        await stopServerAudioRecording(true);
+      } else {
+        await startServerAudioRecording();
+      }
+    }
+
+    async function startServerAudioRecording() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        appendErrorMessage({
+          title: currentLang === 'hi' ? '🎤 ऑडियो रिकॉर्डिंग असमर्थ' : '🎤 Audio Recording Unsupported',
+          message: currentLang === 'hi'
+            ? 'आपके ब्राउज़र में ऑडियो रिकॉर्डिंग समर्थित नहीं है। कृपया लिखकर संदेश भेजें।'
+            : 'Audio recording (MediaRecorder) is not supported in this browser. Please type your message.',
+          type: 'recording_unsupported'
+        });
+        return;
+      }
+
+      stopSpeaking();
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        console.warn('getUserMedia error:', err);
+        appendErrorMessage({
+          title: currentLang === 'hi' ? '🎤 माइक्रोफ़ोन अनुमति नहीं मिली' : '🎤 Microphone Access Denied',
+          message: currentLang === 'hi'
+            ? 'माइक्रोफ़ोन का एक्सेस अस्वीकृत कर दिया गया है। कृपया ब्राउज़र सेटिंग्स में माइक्रोफ़ोन की अनुमति दें या लिखकर भेजें।'
+            : 'Microphone permission was denied. Please allow microphone access in browser settings or type your message below.',
+          type: 'permission'
+        });
+        return;
+      }
+
+      let mimeType = '';
+      if (typeof MediaRecorder.isTypeSupported === 'function') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        }
+      }
+
+      try {
+        mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+      } catch (err) {
+        console.warn('MediaRecorder fallback:', err);
+        mediaRecorder = new MediaRecorder(mediaStream);
+      }
+
+      audioChunks = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstart = () => {
+        isRecordingServerAudio = true;
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) micBtn.classList.add('listening');
+
+        const preview = document.getElementById('speechPreview');
+        if (preview) {
+          preview.classList.add('active');
+          const liveText = document.getElementById('speechLiveText');
+          if (liveText) {
+            liveText.innerHTML = currentLang === 'hi'
+              ? '<span style="color:#ef4444; font-weight:700;">🔴 रिकॉर्डिंग जारी...</span> (समाप्त करने के लिए माइक दोबारा दबाएं)'
+              : '<span style="color:#ef4444; font-weight:700;">🔴 Recording audio...</span> (Tap mic again to finish & transcribe)';
+          }
+        }
+        updateStatusCaption(currentLang === 'hi'
+          ? '🔴 रिकॉर्डिंग जारी... समाप्त करने के लिए माइक दोबारा दबाएं'
+          : '🔴 Recording audio... Tap mic again to finish & transcribe with Groq');
+      };
+
+      mediaRecorder.onerror = (e) => {
+        console.error('MediaRecorder error:', e);
+        stopServerAudioRecording(false);
+      };
+
+      mediaRecorder.start(250);
+
+      if (serverAudioTimeout) clearTimeout(serverAudioTimeout);
+      serverAudioTimeout = setTimeout(() => {
+        if (isRecordingServerAudio) {
+          stopServerAudioRecording(true);
+        }
+      }, 20000); // 20s safety limit
+    }
+
+    async function stopServerAudioRecording(shouldTranscribe = true) {
+      if (serverAudioTimeout) {
+        clearTimeout(serverAudioTimeout);
+        serverAudioTimeout = null;
+      }
+
+      const wasRecording = isRecordingServerAudio;
+      isRecordingServerAudio = false;
+
+      const micBtn = document.getElementById('micBtn');
+      if (micBtn) micBtn.classList.remove('listening');
+
+      if (!wasRecording || !mediaRecorder) {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+          mediaStream = null;
+        }
+        return;
+      }
+
+      return new Promise((resolve) => {
+        mediaRecorder.onstop = async () => {
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+          }
+
+          if (!shouldTranscribe || audioChunks.length === 0) {
+            const preview = document.getElementById('speechPreview');
+            if (preview) preview.classList.remove('active');
+            resolve();
+            return;
+          }
+
+          // Show transcribing status
+          const preview = document.getElementById('speechPreview');
+          if (preview) {
+            preview.classList.add('active');
+            const liveText = document.getElementById('speechLiveText');
+            if (liveText) {
+              liveText.innerHTML = currentLang === 'hi'
+                ? '⏳ <span style="color:#38bdf8; font-weight:600;">Groq Whisper से ट्रांसक्राइब किया जा रहा है...</span>'
+                : '⏳ <span style="color:#38bdf8; font-weight:600;">Transcribing audio with Groq Whisper...</span>';
+            }
+          }
+          updateStatusCaption(currentLang === 'hi'
+            ? 'Groq Whisper से ट्रांसक्राइब हो रहा है...'
+            : 'Transcribing audio with Groq Whisper...');
+
+          try {
+            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunks, { type: mimeType });
+            audioChunks = [];
+
+            if (blob.size < 300) {
+              if (preview) preview.classList.remove('active');
+              showEmptySpeechNotice();
+              resolve();
+              return;
+            }
+
+            const ext = mimeType.includes('mp4') ? 'mp4' : (mimeType.includes('ogg') ? 'ogg' : (mimeType.includes('wav') ? 'wav' : 'webm'));
+            const formData = new FormData();
+            formData.append('file', blob, `audio_input.${ext}`);
+            formData.append('lang', currentLang);
+
+            const resp = await fetch('/transcribe', {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!resp.ok) {
+              const errData = await resp.json().catch(() => ({}));
+              throw new Error(errData.detail || errData.error || `HTTP ${resp.status}`);
+            }
+
+            const data = await resp.json();
+            if (preview) preview.classList.remove('active');
+
+            if (data.status === 'error' || data.error) {
+              throw new Error(data.error);
+            }
+
+            const transcribed = (data.text || '').trim();
+            if (!transcribed) {
+              showEmptySpeechNotice();
+              resolve();
+              return;
+            }
+
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) chatInput.value = transcribed;
+
+            updateStatusCaption(currentLang === 'hi'
+              ? `ट्रांसक्रिप्शन: "${transcribed.substring(0, 32)}..."`
+              : `Transcribed: "${transcribed.substring(0, 32)}..."`);
+
+            await handleSendMessage(transcribed);
+          } catch (err) {
+            console.error('Server transcription error:', err);
+            const preview = document.getElementById('speechPreview');
+            if (preview) preview.classList.remove('active');
+            appendErrorMessage({
+              title: currentLang === 'hi' ? '⚠️ वाक् पहचान विफल (STT Error)' : '⚠️ Transcription Error',
+              message: currentLang === 'hi'
+                ? `सर्वर पर वाक् पहचान में त्रुटि आई: ${err.message || 'त्रुटि'}। कृपया दोबारा बोलें या नीचे लिखकर भेजें।`
+                : `Server speech-to-text failed: ${err.message || 'Error'}. Please try again or type your message below.`,
+              type: 'transcribe_error'
+            });
+          } finally {
+            resolve();
+          }
+        };
+
+        try {
+          if (mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+        } catch (e) {
+          console.warn('Error stopping mediaRecorder:', e);
+          resolve();
+        }
+      });
+    }
+
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const micBtn = document.getElementById('micBtn');
@@ -1495,6 +1875,12 @@
       }
     }
 
+    
+    function updateStatusCaption(text) {
+      const el = document.getElementById('statusCaption');
+      if (el) el.innerText = text;
+    }
+
     function stopListening() {
       isListening = false;
       const mic = document.getElementById('micBtn');
@@ -1521,6 +1907,16 @@
         document.getElementById('demoBtnLabel').innerText = 'डेमो मोड (Demo)';
         document.getElementById('resetBtnLabel').innerText = 'रीसेट';
         document.getElementById('chatInput').placeholder = 'बोलें या यहाँ अपना संदेश लिखें... (Speak or type)';
+      const toggleLabel = document.getElementById('toggleServerSpeechLabel');
+      if (toggleLabel) {
+        toggleLabel.textContent = lang === 'hi'
+          ? 'Use server speech recognition (सर्वर वाक् पहचान)'
+          : 'Use server speech recognition';
+      }
+      const toggleBadge = document.getElementById('speechToggleBadge');
+      if (toggleBadge && !isServerSpeechMode) {
+        toggleBadge.textContent = lang === 'hi' ? 'ब्राउज़र डिफ़ॉल्ट' : 'Browser Default';
+      }
         const fDisc = document.getElementById('footerDisclaimer');
         if (fDisc) fDisc.innerText = '⚠️ सहायक एक प्रोटोटाइप है, आधिकारिक सरकारी सेवा नहीं। कृपया आधिकारिक पोर्टल पर नियमों का सत्यापन अवश्य करें।';
       } else {
@@ -1528,6 +1924,10 @@
         document.getElementById('demoBtnLabel').innerText = 'Demo Mode (Play)';
         document.getElementById('resetBtnLabel').innerText = 'Reset';
         document.getElementById('chatInput').placeholder = 'Speak or type your message here...';
+        const toggleLabelEn = document.getElementById('toggleServerSpeechLabel');
+        if (toggleLabelEn) toggleLabelEn.textContent = 'Use server speech recognition';
+        const toggleBadgeEn = document.getElementById('speechToggleBadge');
+        if (toggleBadgeEn && !isServerSpeechMode) toggleBadgeEn.textContent = 'Browser Default';
         const fDisc = document.getElementById('footerDisclaimer');
         if (fDisc) fDisc.innerText = '⚠️ Sahayak is a prototype, not an official government service. Verify on the official portal.';
       }

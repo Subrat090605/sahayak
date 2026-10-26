@@ -79,7 +79,10 @@ Citizen Voice/Text
 ## ⚡ High-Resilience LLM Gateway (`llm.py`)
 
 - **Primary Provider**: Google Gemini 2.5/2.0 Flash via the official `google-genai` SDK.
-- **Secondary Provider**: Groq (Llama 3.3 70B & Llama 4 Scout Vision) via the `groq` SDK.
+- **Secondary Provider**: Groq (Llama 3.3 70B, Llama 4 Scout Vision, & Whisper Large V3 Turbo) via the `groq` SDK.
+- **Speech-to-Text Integration**:
+  - **Browser Default**: Zero-latency native Web Speech API (`webkitSpeechRecognition`).
+  - **Server Recognition (Groq Whisper)**: Toggle **"Use server speech recognition"** in the UI to record via browser `MediaRecorder`, stream audio to `POST /transcribe`, and transcribe with Groq's `whisper-large-v3-turbo` (`GROQ_STT_MODEL`). Provides superior rural Hindi accuracy and enables voice on browsers without Web Speech support.
 - **Auto-Failover**: Primary failure or HTTP 429 triggers an immediate 1-second backoff retry, then falls back seamlessly to the secondary provider.
 - **Offline Capable**: The app works cleanly even with **zero API keys** using deterministic rule engines, structured template replies, and regex extractors.
 
@@ -134,6 +137,7 @@ GEMINI_MODEL=gemini-2.5-flash
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+GROQ_STT_MODEL=whisper-large-v3-turbo
 
 # Configuration
 LLM_PROVIDER=gemini

@@ -349,3 +349,41 @@ def describe_image(
         return (response.choices[0].message.content or "").strip()
 
     return _execute_with_fallback("describe_image", call_gemini, call_groq, preferred_provider=provider)
+
+
+def transcribe_audio(
+    audio_bytes: bytes,
+    filename: str = "audio.webm",
+    mime_type: str | None = None,
+    language: str | None = None,
+    prompt: str | None = None,
+) -> str:
+    """Transcribes audio using Groq's speech-to-text model from environment (GROQ_STT_MODEL).
+
+    Accepts raw audio bytes (e.g. webm, wav, mp4, ogg) and returns the transcribed text.
+    Uses GROQ_STT_MODEL (defaults to whisper-large-v3-turbo).
+    """
+    client = _get_groq_client()
+    if not client:
+        raise ValueError("GROQ_API_KEY is not configured in environment")
+
+    stt_model = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo").strip() or "whisper-large-v3-turbo"
+    resolved_mime = mime_type or "audio/webm"
+    file_payload = (filename or "audio.webm", audio_bytes, resolved_mime)
+
+    kwargs: dict[str, Any] = {
+        "model": stt_model,
+        "file": file_payload,
+    }
+    if language and language.lower() in {"hi", "en"}:
+        kwargs["language"] = language.lower()
+    if prompt:
+        kwargs["prompt"] = prompt
+
+    try:
+        response = client.audio.transcriptions.create(**kwargs)
+        text = getattr(response, "text", "") or ""
+        return text.strip()
+    except Exception as exc:
+        logger.error("Groq speech-to-text transcription error: %s", exc)
+        raise

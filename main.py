@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from agents import eligibility_agent, generate_form_html, generate_ics, verify_document_image
 from coordinator import SESSIONS, get_or_create_session, handle_message
 from eligibility import load_schemes
+from llm import transcribe_audio
 
 # Load environment variables without exposing secrets
 load_dotenv()
@@ -41,6 +42,12 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # Pydantic Request & Response Models
 # ---------------------------------------------------------------------------
+
+
+class TranscribeResponse(BaseModel):
+    text: str = Field(..., description="Transcribed text from speech recording")
+    status: str = Field(default="ok", description="'ok' or 'error'")
+    error: str | None = Field(default=None, description="Error explanation if status is error")
 
 
 class ChatRequest(BaseModel):
@@ -474,6 +481,51 @@ def reminders_scheme_alias(
 
 
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Speech-to-Text Transcription Endpoint (Groq Whisper)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/transcribe", response_model=TranscribeResponse)
+async def transcribe_endpoint(
+    file: UploadFile = File(..., description="Audio recording file (webm, wav, mp4, ogg)"),
+    lang: str | None = Form(None, description="Optional language hint (hi or en)"),
+) -> TranscribeResponse:
+    """Accepts a short audio recording, sends it to Groq's speech-to-text model
+    from the environment file (GROQ_STT_MODEL), and returns the transcribed text.
+    """
+    try:
+        audio_bytes = await file.read()
+        if not audio_bytes or len(audio_bytes) < 32:
+            return TranscribeResponse(
+                text="",
+                status="error",
+                error="Empty or invalid audio recording received.",
+            )
+
+        filename = file.filename or "recording.webm"
+        mime_type = file.content_type or "audio/webm"
+        lang_hint = lang if lang in {"hi", "en"} else None
+
+        text = transcribe_audio(
+            audio_bytes=audio_bytes,
+            filename=filename,
+            mime_type=mime_type,
+            language=lang_hint,
+        )
+
+        return TranscribeResponse(text=text, status="ok")
+    except Exception as exc:
+        logger.error("Error in /transcribe endpoint: %s", exc, exc_info=True)
+        return TranscribeResponse(
+            text="",
+            status="error",
+            error=str(exc),
+        )
+
+
 # Static Files (Mounted last so API routes take precedence)
 # ---------------------------------------------------------------------------
 
