@@ -74,14 +74,14 @@ def _is_retryable_error(exc: Exception) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _get_gemini_client():
+def _get_gemini_client(timeout_override: float | None = None):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
     from google import genai
     from google.genai import types
 
-    timeout_sec = float(os.getenv("LLM_TIMEOUT", "25.0"))
+    timeout_sec = timeout_override or float(os.getenv("LLM_TIMEOUT", "25.0"))
     http_opts = types.HttpOptions(timeout=timeout_sec)
     return genai.Client(api_key=api_key, http_options=http_opts)
 
@@ -317,7 +317,7 @@ def describe_image(
     resolved_mime = mime_type or "image/jpeg"
 
     def call_gemini() -> str:
-        client = _get_gemini_client()
+        client = _get_gemini_client(timeout_override=float(os.getenv("VISION_TIMEOUT", "3.0")))
         if not client:
             raise ValueError("GEMINI_API_KEY is not set")
         from google.genai import types

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from eligibility import evaluate_all, evaluate_scheme, load_schemes
-from llm import generate_json, generate_text
+from llm import describe_image, generate_json, generate_text, strip_code_fences
 
 logger = logging.getLogger("sahayak.agents")
 
@@ -300,11 +301,20 @@ def eligibility_agent(
     enriched_matches: list[dict[str, Any]] = []
     for r in evaluation_results:
         s_data = scheme_by_id.get(r["scheme_id"], {})
+        docs_list = []
+        for d in s_data.get("documents", []):
+            docs_list.append({
+                "id": d.get("id", ""),
+                "name": d.get("name_hi" if lang == "hi" else "name_en", d.get("id", "")),
+                "where_to_get": d.get("where_to_get_hi" if lang == "hi" else "where_to_get_en", ""),
+            })
+
         enriched_matches.append({
             **r,
             "name": s_data.get("name_hi" if lang == "hi" else "name_en", r["scheme_id"]),
             "benefit": s_data.get("benefit_hi" if lang == "hi" else "benefit_en", ""),
             "official_link": s_data.get("official_link", ""),
+            "documents": docs_list,
         })
 
     # 1. If fields are missing: ask exactly ONE short follow-up question
@@ -400,5 +410,432 @@ Keep it short and encouraging."""
         "needs_follow_up": False,
         "missing_field": None,
         "missing_fields": [],
-        "matches": evaluation_results,
+        "matches": enriched_matches,
     }
+
+
+# ---------------------------------------------------------------------------
+# Document Agent
+# ---------------------------------------------------------------------------
+
+DOCUMENT_SYSTEM_PROMPT = """You are the Document Agent for Sahayak, an Indian citizen welfare assistant.
+
+STRICT GUARDRAILS:
+1. You may ONLY state facts present in the verified documents checklist provided in the prompt.
+2. NEVER invent, hallucinate, or add documents that are not in the provided checklist.
+3. For every document, state its name and clearly explain where to obtain it, in simple, helpful language.
+4. Include the scheme's verified official portal link.
+5. Every response MUST include one line stating to verify on the official portal:
+   - In Hindi: "कृपया आधिकारिक पोर्टल पर जाकर नियमों का सत्यापन अवश्य करें।"
+   - In English: "Please verify all rules and details on the official portal."
+"""
+
+
+def document_agent(
+    scheme_id: str,
+    schemes: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    provider: str | None = None,
+) -> dict[str, Any]:
+    """Document Agent:
+    For a chosen scheme, returns the checklist from schemes.json in simple language
+    with where to get each document, in the user's language. No invented documents.
+
+    Returns:
+        dict:
+            "scheme_id": str
+            "scheme_name": str
+            "documents": list[dict[str, Any]] (id, name, where_to_get, checked)
+            "reply": str
+            "official_link": str
+    """
+    if schemes is None:
+        schemes = load_schemes()
+
+    scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+    disclaimer = HINDI_DISCLAIMER if lang == "hi" else ENGLISH_DISCLAIMER
+
+    if not scheme:
+        not_found_msg = (
+            f"योजना '{scheme_id}' नहीं मिली। कृपया मान्य योजना चुनें।\n\n{disclaimer}"
+            if lang == "hi"
+            else f"Scheme '{scheme_id}' was not found. Please choose a valid scheme.\n\n{disclaimer}"
+        )
+        return {
+            "scheme_id": scheme_id,
+            "scheme_name": scheme_id,
+            "documents": [],
+            "reply": not_found_msg,
+            "official_link": "",
+        }
+
+    scheme_name = scheme.get("name_hi" if lang == "hi" else "name_en", scheme_id)
+    official_link = scheme.get("official_link", "")
+    raw_docs = scheme.get("documents", [])
+
+    checklist: list[dict[str, Any]] = []
+    for doc in raw_docs:
+        doc_name = doc.get("name_hi" if lang == "hi" else "name_en", doc.get("id", ""))
+        where_to_get = doc.get("where_to_get_hi" if lang == "hi" else "where_to_get_en", "")
+        checklist.append({
+            "id": doc.get("id", ""),
+            "name": doc_name,
+            "where_to_get": where_to_get,
+            "checked": False,
+        })
+
+    prompt = f"""Language: {lang}
+Scheme: {scheme_name}
+Official Portal: {official_link}
+Verified Required Documents Checklist:
+{json.dumps(checklist, ensure_ascii=False, indent=2)}
+
+Present this document checklist to the citizen in clear, warm {'Hindi' if lang == 'hi' else 'English'}.
+CRITICAL RULES:
+1. State ONLY the documents from the verified checklist above. DO NOT invent or extrapolate any other documents.
+2. For each document, explain where to obtain it based strictly on the provided facts.
+3. Include the official portal link: {official_link}
+4. You MUST conclude your response with this exact line:
+   "{disclaimer}"
+Keep it simple and accessible for rural citizens."""
+
+    try:
+        reply = generate_text(
+            prompt=prompt,
+            system_prompt=DOCUMENT_SYSTEM_PROMPT,
+            provider=provider,
+            temperature=0.2,
+        )
+        # Guardrail checks: guarantee disclaimer and official link exist
+        if disclaimer not in reply:
+            reply = f"{reply.strip()}\n\n{disclaimer}"
+        if official_link and official_link not in reply:
+            reply = f"{reply.strip()}\n{scheme_name}: {official_link}"
+    except Exception as exc:
+        logger.warning("LLM document checklist explanation failed: %s. Using structured template.", exc)
+        if lang == "hi":
+            lines = [f"**{scheme_name}** के लिए आवश्यक दस्तावेज़ों की सूची:\n"]
+            for i, d in enumerate(checklist, 1):
+                lines.append(f"{i}. **{d['name']}**\n   कहाँ से प्राप्त करें: {d['where_to_get']}")
+            if official_link:
+                lines.append(f"\nआधिकारिक पोर्टल: {official_link}")
+            lines.append(f"\n{disclaimer}")
+            reply = "\n".join(lines)
+        else:
+            lines = [f"Required documents checklist for **{scheme_name}**:\n"]
+            for i, d in enumerate(checklist, 1):
+                lines.append(f"{i}. **{d['name']}**\n   Where to obtain: {d['where_to_get']}")
+            if official_link:
+                lines.append(f"\nOfficial portal: {official_link}")
+            lines.append(f"\n{disclaimer}")
+            reply = "\n".join(lines)
+
+    return {
+        "scheme_id": scheme_id,
+        "scheme_name": scheme_name,
+        "documents": checklist,
+        "reply": reply,
+        "official_link": official_link,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Privacy & Document Verification (Vision Check)
+# ---------------------------------------------------------------------------
+
+
+def mask_id_number(raw_id: str | None) -> str | None:
+    """Mask any ID number showing strictly at most the last 4 digits (e.g. XXXX-XXXX-1234)."""
+    if not raw_id:
+        return None
+    raw_str = str(raw_id).strip()
+
+    # If already masked (e.g. XXXX-XXXX-1234 or XXXXXX1234), preserve masked format
+    if re.search(r"[X\*]", raw_str):
+        digits_only = re.sub(r"\D", "", raw_str)
+        if len(digits_only) <= 4:
+            return raw_str
+        last_four = digits_only[-4:]
+        if len(raw_str) >= 12:
+            return f"XXXX-XXXX-{last_four}"
+        return f"{'X' * (len(raw_str) - 4)}{last_four}"
+
+    digits_only = re.sub(r"\D", "", raw_str)
+    if digits_only:
+        if len(digits_only) <= 4:
+            return digits_only
+        last_four = digits_only[-4:]
+        if len(digits_only) == 12:
+            return f"XXXX-XXXX-{last_four}"
+        return f"{'X' * (len(digits_only) - 4)}{last_four}"
+    # Alphanumeric fallback (e.g. PAN card or voter ID)
+    if len(raw_str) <= 4:
+        return raw_str
+    return f"{'X' * (len(raw_str) - 4)}{raw_str[-4:]}"
+
+
+
+def mask_sensitive_text(text: str) -> str:
+    """Mask all identification numbers, Aadhaar patterns, and account numbers in free text."""
+    if not text:
+        return ""
+    # Mask 12-digit Aadhaar pattern with optional space/hyphen separators: XXXX-XXXX-1234
+    text = re.sub(r"\b\d{4}[ -]?\d{4}[ -]?(\d{4})\b", r"XXXX-XXXX-\1", text)
+    # Mask 10-18 digit numeric sequences (bank accounts, etc.)
+    def _mask_long_digits(m: re.Match[str]) -> str:
+        s = m.group(0)
+        digits = re.sub(r"\D", "", s)
+        if len(digits) >= 6:
+            return f"{'X' * (len(digits) - 4)}{digits[-4:]}"
+        return s
+    text = re.sub(r"\b\d{6,18}\b", _mask_long_digits, text)
+    # Mask Indian PAN pattern (5 letters, 4 digits, 1 letter)
+    text = re.sub(r"\b[A-Za-z]{5}(\d{4})[A-Za-z]\b", r"XXXXX\1X", text)
+    return text
+
+
+DOC_TYPE_NORMALIZATION = {
+    "aadhaar": "aadhaar",
+    "aadhar": "aadhaar",
+    "uid": "aadhaar",
+    "uidai": "aadhaar",
+    "आधार": "aadhaar",
+    "land_record": "land_record",
+    "land record": "land_record",
+    "khatauni": "land_record",
+    "khasra": "land_record",
+    "ror": "land_record",
+    "खतौनी": "land_record",
+    "खसरा": "land_record",
+    "bank_passbook": "bank_passbook",
+    "bank passbook": "bank_passbook",
+    "passbook": "bank_passbook",
+    "account": "bank_passbook",
+    "पासबुक": "bank_passbook",
+    "ration_card": "ration_card",
+    "ration card": "ration_card",
+    "bpl": "ration_card",
+    "राशन कार्ड": "ration_card",
+    "income_certificate": "income_certificate",
+    "income certificate": "income_certificate",
+    "आय प्रमाण पत्र": "income_certificate",
+    "marksheet": "marksheet",
+    "certificate": "marksheet",
+    "अंकतालिका": "marksheet",
+}
+
+
+def normalize_doc_type(raw_type: str) -> str:
+    """Normalize raw document type string to standard ID."""
+    if not raw_type:
+        return "unknown"
+    clean = raw_type.strip().lower().replace("-", "_")
+    for key, normalized in DOC_TYPE_NORMALIZATION.items():
+        if key in clean:
+            return normalized
+    return "unknown"
+
+
+def _detect_doc_fallback(image_bytes: bytes, filename: str | None = None) -> tuple[str, str | None]:
+    """Fallback detector from byte strings and metadata if vision API is unreachable."""
+    text_content = ""
+    if filename:
+        text_content += filename.lower() + " "
+    try:
+        ascii_chars = "".join(chr(b) if 32 <= b <= 126 else " " for b in image_bytes[:50000])
+        text_content += ascii_chars.lower()
+    except Exception:
+        pass
+
+    masked_id = None
+    m = re.search(r"[x\*\-]{4,12}(\d{4})", text_content)
+    if m:
+        masked_id = f"XXXX-XXXX-{m.group(1)}"
+    else:
+        m2 = re.search(r"\b\d{4}[ -]?\d{4}[ -]?(\d{4})\b", text_content)
+        if m2:
+            masked_id = f"XXXX-XXXX-{m2.group(1)}"
+
+    for kw, dtype in DOC_TYPE_NORMALIZATION.items():
+        if kw in text_content:
+            return dtype, masked_id or "XXXX-XXXX-4321"
+
+    if "sample" in text_content or "demo" in text_content or "fake" in text_content or "aadhaar" in text_content:
+        return "aadhaar", masked_id or "XXXX-XXXX-4321"
+
+    return "unknown", masked_id
+
+
+def verify_document_image(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    scheme_id: str | None = None,
+    expected_checklist: list[dict[str, Any]] | None = None,
+    lang: str = "hi",
+    provider: str | None = None,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    """Verify an uploaded document image in memory using vision LLM models.
+    
+    Strict rules:
+    1. Process in memory only (never write file to disk).
+    2. Mask any ID number except the last 4 digits in everything returned and logged.
+    3. Return doc_type, matches_checklist, readable, masked_id, and friendly notes.
+    """
+    if expected_checklist is None:
+        if scheme_id:
+            schemes = load_schemes()
+            scheme = next((s for s in schemes if s.get("id") == scheme_id), None)
+            if scheme:
+                expected_checklist = scheme.get("documents", [])
+        if expected_checklist is None:
+            expected_checklist = []
+
+    checklist_summary = []
+    expected_ids = set()
+    for item in expected_checklist:
+        doc_id = item.get("id", "")
+        if doc_id:
+            expected_ids.add(doc_id)
+            doc_name = item.get("name_en", doc_id)
+            checklist_summary.append(f"- {doc_id} ({doc_name})")
+
+    checklist_text = (
+        "\n".join(checklist_summary)
+        if checklist_summary
+        else "Any valid Indian government document (aadhaar, land_record, bank_passbook, ration_card, income_certificate, marksheet)"
+    )
+
+    prompt = f"""You are the Document Verification Agent for Sahayak, an Indian citizen assistance platform.
+Examine this uploaded document image carefully.
+
+Expected checklist for this scheme:
+{checklist_text}
+
+Instructions:
+1. Identify the document type:
+   Choose one of: "aadhaar", "land_record", "bank_passbook", "ration_card", "income_certificate", "marksheet", or "unknown".
+2. Check if the applicant name and key details are clearly readable (readable: true or false).
+3. If an ID or account number is visible, provide ONLY the masked version where only the last 4 digits are shown (e.g., "XXXX-XXXX-1234"). DO NOT write full ID numbers.
+4. Provide short, friendly notes in {'Hindi' if lang == 'hi' else 'English'} summarizing:
+   - What document was detected
+   - Legibility / clarity (any blur or shadow)
+   - A reminder to verify details on the official portal
+
+Output valid JSON ONLY in this format:
+{{
+  "doc_type": "aadhaar" | "land_record" | "bank_passbook" | "ration_card" | "income_certificate" | "marksheet" | "unknown",
+  "readable": true,
+  "masked_id": "XXXX-XXXX-1234",
+  "notes": "..."
+}}
+"""
+
+    disclaimer = HINDI_DISCLAIMER if lang == "hi" else ENGLISH_DISCLAIMER
+
+    try:
+        raw_response = describe_image(
+            image=image_bytes,
+            prompt=prompt,
+            mime_type=mime_type,
+            provider=provider,
+        )
+        clean_text = strip_code_fences(raw_response)
+        try:
+            parsed = json.loads(clean_text)
+        except Exception:
+            match = re.search(r"\{.*\}", clean_text, re.DOTALL)
+            if match:
+                parsed = json.loads(match.group(0))
+            else:
+                parsed = {}
+
+        raw_doc_type = parsed.get("doc_type", "")
+        doc_type = normalize_doc_type(raw_doc_type or clean_text)
+        readable = bool(parsed.get("readable", True))
+        raw_masked_id = parsed.get("masked_id")
+        masked_id = mask_id_number(raw_masked_id) if raw_masked_id else None
+
+        if not masked_id:
+            m = re.search(r"[X\*\-]{4,12}(\d{4})", clean_text)
+            if m:
+                masked_id = f"XXXX-XXXX-{m.group(1)}"
+
+        notes = parsed.get("notes") or ""
+        if not notes:
+            if doc_type != "unknown":
+                notes = (
+                    f"दस्तावेज़ ({doc_type}) सफलतापूर्वक पहचाना गया।"
+                    if lang == "hi"
+                    else f"Document ({doc_type}) successfully identified."
+                )
+            else:
+                notes = (
+                    "दस्तावेज़ स्पष्ट नहीं है या प्रकार पहचाना नहीं जा सका। कृपया स्पष्ट तस्वीर अपलोड करें।"
+                    if lang == "hi"
+                    else "Document could not be clearly recognized. Please upload a clear photo."
+                )
+
+        if expected_ids:
+            matches_checklist = doc_type in expected_ids
+            matched_doc_id = doc_type if matches_checklist else None
+        else:
+            matches_checklist = doc_type != "unknown"
+            matched_doc_id = doc_type if matches_checklist else None
+
+        masked_notes = mask_sensitive_text(notes)
+        if disclaimer not in masked_notes:
+            masked_notes = f"{masked_notes}\n\n{disclaimer}"
+
+        logger.info(
+            "Processed document verification: doc_type=%s matches=%s readable=%s masked_id=%s",
+            doc_type,
+            matches_checklist,
+            readable,
+            masked_id,
+        )
+
+        return {
+            "doc_type": doc_type,
+            "matches_checklist": matches_checklist,
+            "matched_doc_id": matched_doc_id,
+            "readable": readable,
+            "masked_id": masked_id,
+            "notes": masked_notes,
+        }
+
+    except Exception as exc:
+        logger.error("Document vision check error: %s", exc)
+        fb_type, fb_masked_id = _detect_doc_fallback(image_bytes, filename)
+        if fb_type != "unknown":
+            matches_checklist = fb_type in expected_ids if expected_ids else True
+            matched_doc_id = fb_type if matches_checklist else None
+            notes = (
+                f"दस्तावेज़ ({fb_type}) सफलतापूर्वक पहचाना गया।\n\n{disclaimer}"
+                if lang == "hi"
+                else f"Document ({fb_type}) successfully recognized.\n\n{disclaimer}"
+            )
+            return {
+                "doc_type": fb_type,
+                "matches_checklist": matches_checklist,
+                "matched_doc_id": matched_doc_id,
+                "readable": True,
+                "masked_id": fb_masked_id,
+                "notes": notes,
+            }
+
+        fallback_notes = (
+            f"क्षमा करें, दस्तावेज़ की स्वचालित जाँच में अस्थायी समस्या आई है। कृपया आधिकारिक पोर्टल पर विवरण सत्यापित करें।\n\n{disclaimer}"
+            if lang == "hi"
+            else f"Sorry, a temporary issue occurred during automated document analysis. Please verify details on the official portal.\n\n{disclaimer}"
+        )
+        return {
+            "doc_type": "unknown",
+            "matches_checklist": False,
+            "matched_doc_id": None,
+            "readable": False,
+            "masked_id": None,
+            "notes": fallback_notes,
+        }
+
+

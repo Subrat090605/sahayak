@@ -180,3 +180,169 @@ def test_eligibility_agent_guardrail_system_prompt_and_enforcement():
     assert ENGLISH_DISCLAIMER in res["reply"]
 
 
+def test_document_agent_returns_checklist_pm_kisan_hindi():
+    """Verify document_agent returns verified checklist for PM-KISAN in Hindi."""
+    from eligibility import load_schemes
+    from agents import document_agent, HINDI_DISCLAIMER
+
+    schemes = load_schemes()
+    mock_reply = (
+        "पीएम-किसान के लिए आवश्यक दस्तावेज़:\n"
+        "1. आधार कार्ड: UIDAI पोर्टल या निकटतम आधार सेवा केंद्र / जन सेवा केंद्र\n"
+        "2. भूमि स्वामित्व रिकॉर्ड (खसरा / खतौनी): राज्य राजस्व विभाग का पोर्टल या स्थानीय तहसील\n"
+        "3. आधार से जुड़ा बैंक खाता पासबुक: आपकी स्थानीय बैंक शाखा\n\n"
+        "https://pmkisan.gov.in\n"
+        f"{HINDI_DISCLAIMER}"
+    )
+
+    with patch("agents.generate_text", return_value=mock_reply):
+        res = document_agent("pm-kisan", schemes=schemes, lang="hi")
+
+    assert res["scheme_id"] == "pm-kisan"
+    assert "पीएम-किसान" in res["scheme_name"]
+    assert res["official_link"] == "https://pmkisan.gov.in"
+    assert len(res["documents"]) == 3
+
+    doc_ids = [d["id"] for d in res["documents"]]
+    assert doc_ids == ["aadhaar", "land_record", "bank_passbook"]
+    assert "आधार कार्ड" in res["documents"][0]["name"]
+    assert "UIDAI" in res["documents"][0]["where_to_get"]
+    assert res["documents"][0]["checked"] is False
+
+    assert "https://pmkisan.gov.in" in res["reply"]
+    assert HINDI_DISCLAIMER in res["reply"]
+
+
+def test_document_agent_returns_checklist_pm_jay_english():
+    """Verify document_agent returns verified checklist for PM-JAY in English."""
+    from eligibility import load_schemes
+    from agents import document_agent, ENGLISH_DISCLAIMER
+
+    schemes = load_schemes()
+    mock_reply = (
+        "Required documents for Ayushman Bharat PM-JAY:\n"
+        "1. Aadhaar Card: UIDAI portal\n"
+        "2. Ration Card / BPL Card / Family ID: State Food & Civil Supplies Department portal\n\n"
+        "https://pmjay.gov.in\n"
+        f"{ENGLISH_DISCLAIMER}"
+    )
+
+    with patch("agents.generate_text", return_value=mock_reply):
+        res = document_agent("pm-jay", schemes=schemes, lang="en")
+
+    assert res["scheme_id"] == "pm-jay"
+    assert "Ayushman Bharat" in res["scheme_name"]
+    assert res["official_link"] == "https://pmjay.gov.in"
+    assert len(res["documents"]) == 2
+
+    doc_ids = [d["id"] for d in res["documents"]]
+    assert doc_ids == ["aadhaar", "ration_card"]
+    assert "Aadhaar Card" in res["documents"][0]["name"]
+    assert "Ration Card" in res["documents"][1]["name"]
+
+    assert "https://pmjay.gov.in" in res["reply"]
+    assert ENGLISH_DISCLAIMER in res["reply"]
+
+
+def test_document_agent_guardrails_and_system_prompt():
+    """Verify document agent system prompt guardrails and enforcement of link and disclaimer."""
+    from eligibility import load_schemes
+    from agents import document_agent, DOCUMENT_SYSTEM_PROMPT, ENGLISH_DISCLAIMER
+
+    schemes = load_schemes()
+    assert "checklist" in DOCUMENT_SYSTEM_PROMPT.lower()
+    assert "never invent" in DOCUMENT_SYSTEM_PROMPT.lower()
+    assert "official portal link" in DOCUMENT_SYSTEM_PROMPT.lower()
+    assert "verify on the official portal" in DOCUMENT_SYSTEM_PROMPT.lower()
+
+    # If the LLM omits the link and disclaimer
+    mock_raw_output = "Here are your documents: 1. Aadhaar Card 2. Land Record"
+    with patch("agents.generate_text", return_value=mock_raw_output) as mock_gen:
+        res = document_agent("pm-kisan", schemes=schemes, lang="en")
+
+        _, kwargs = mock_gen.call_args
+        assert kwargs.get("system_prompt") == DOCUMENT_SYSTEM_PROMPT
+
+    # Guardrails must have enforced the inclusion of official link and disclaimer
+    assert "https://pmkisan.gov.in" in res["reply"]
+    assert ENGLISH_DISCLAIMER in res["reply"]
+
+
+def test_document_agent_unknown_scheme():
+    """Verify document_agent handles non-existent scheme gracefully."""
+    from eligibility import load_schemes
+    from agents import document_agent
+
+    schemes = load_schemes()
+    res = document_agent("non-existent-scheme", schemes=schemes, lang="hi")
+    assert res["documents"] == []
+    assert "नहीं मिली" in res["reply"]
+
+
+def test_mask_id_number():
+    """Verify ID masking strictly exposes at most the last 4 digits."""
+    from agents import mask_id_number
+
+    assert mask_id_number("123456789012") == "XXXX-XXXX-9012"
+    assert mask_id_number("1234 5678 9012") == "XXXX-XXXX-9012"
+    assert mask_id_number("1234-5678-9012") == "XXXX-XXXX-9012"
+    assert mask_id_number("987654321098") == "XXXX-XXXX-1098"
+    assert mask_id_number("98765432109876") == "XXXXXXXXXX9876"
+    assert mask_id_number("XXXX-XXXX-4321") == "XXXX-XXXX-4321"
+    assert mask_id_number("1234") == "1234"
+    assert mask_id_number(None) is None
+
+
+def test_mask_sensitive_text():
+    """Verify sensitive ID numbers are masked inside free text."""
+    from agents import mask_sensitive_text
+
+    text = "Citizen Aadhaar is 9876 5432 1098 and bank account is 123456789012."
+    masked = mask_sensitive_text(text)
+    assert "9876 5432" not in masked
+    assert "XXXX-XXXX-1098" in masked
+    assert "12345678" not in masked
+    assert "9012" in masked
+
+
+def test_verify_document_image_aadhaar_success():
+    """Verify verify_document_image correctly matches PM-KISAN checklist with masked ID."""
+    from agents import verify_document_image
+
+    mock_vision_output = """```json
+    {
+      "doc_type": "aadhaar",
+      "readable": true,
+      "masked_id": "XXXX-XXXX-5566",
+      "notes": "Clear Aadhaar card with legible name and details."
+    }
+    ```"""
+
+    dummy_image = b"fake-png-bytes"
+    with patch("agents.describe_image", return_value=mock_vision_output):
+        res = verify_document_image(dummy_image, mime_type="image/png", scheme_id="pm-kisan", lang="en")
+
+    assert res["doc_type"] == "aadhaar"
+    assert res["matches_checklist"] is True
+    assert res["matched_doc_id"] == "aadhaar"
+    assert res["readable"] is True
+    assert res["masked_id"] == "XXXX-XXXX-5566"
+    assert "official portal" in res["notes"].lower()
+
+
+def test_verify_document_image_unmatched_checklist():
+    """Verify a valid document not needed by the scheme is flagged matches_checklist=False."""
+    from agents import verify_document_image
+
+    mock_vision_output = '{"doc_type": "marksheet", "readable": true, "masked_id": null, "notes": "Class 10 marksheet"}'
+
+    dummy_image = b"fake-jpeg-bytes"
+    with patch("agents.describe_image", return_value=mock_vision_output):
+        res = verify_document_image(dummy_image, mime_type="image/jpeg", scheme_id="pm-kisan", lang="hi")
+
+    assert res["doc_type"] == "marksheet"
+    assert res["matches_checklist"] is False
+    assert res["matched_doc_id"] is None
+
+
+

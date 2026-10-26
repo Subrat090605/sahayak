@@ -84,3 +84,12 @@ def test_coordinator_turn_by_turn_state_machine():
     assert "https://pmkisan.gov.in" in turn2["reply"]
     eligible_ids = [m["scheme_id"] for m in turn2["matches"] if m["status"] == "eligible"]
     assert "pm-kisan" in eligible_ids
+
+    # Turn 3: User asks for documents needed for PM-KISAN
+    turn3 = handle_message(session_id, "What documents do I need for PM-KISAN?", lang="en")
+    assert turn3["state"] == "DOCUMENTS"
+    agents_turn3 = [t["agent"] for t in turn3["trace"]]
+    assert "document" in agents_turn3
+    assert "Aadhaar" in turn3["reply"]
+    assert "https://pmkisan.gov.in" in turn3["reply"]
+

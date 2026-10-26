@@ -52,3 +52,52 @@ def test_chat_endpoint_graceful_error_recovery():
     assert data["lang"] == "en"
     assert data["state"] == "COLLECT_PROFILE"
     assert any("error recovery" in t["action"] for t in data["trace"])
+
+
+def test_upload_doc_endpoint_success():
+    """Test successful document image upload and verification."""
+    mock_verify_res = {
+        "doc_type": "aadhaar",
+        "matches_checklist": True,
+        "matched_doc_id": "aadhaar",
+        "readable": True,
+        "masked_id": "XXXX-XXXX-4321",
+        "notes": "Valid Aadhaar Card identified. Please verify all rules on the official portal.",
+    }
+
+    dummy_image = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRfakeimagebytes"
+    with patch("main.verify_document_image", return_value=mock_verify_res) as mock_verify:
+        response = client.post(
+            "/upload-doc",
+            files={"file": ("fake_aadhaar.png", dummy_image, "image/png")},
+            data={"session_id": "sess-doc-1", "scheme_id": "pm-kisan", "lang": "hi"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["doc_type"] == "aadhaar"
+    assert data["matches_checklist"] is True
+    assert data["matched_doc_id"] == "aadhaar"
+    assert data["readable"] is True
+    assert data["masked_id"] == "XXXX-XXXX-4321"
+    assert "official portal" in data["notes"].lower() or "पोर्टल" in data["notes"]
+    assert mock_verify.called
+
+
+def test_upload_doc_endpoint_error_recovery():
+    """Endpoint catches unexpected failures and returns friendly fallback without crashing."""
+    dummy_image = b"fakeimage"
+    with patch("main.verify_document_image", side_effect=RuntimeError("Vision service timeout")):
+        response = client.post(
+            "/upload-doc",
+            files={"file": ("doc.jpg", dummy_image, "image/jpeg")},
+            data={"session_id": "sess-err-2", "lang": "en"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["doc_type"] == "unknown"
+    assert data["matches_checklist"] is False
+    assert data["readable"] is False
+    assert "error" in data["notes"].lower() or "sorry" in data["notes"].lower()
+

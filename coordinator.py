@@ -11,7 +11,7 @@ import time
 import uuid
 from typing import Any
 
-from agents import eligibility_agent, profile_agent
+from agents import document_agent, eligibility_agent, profile_agent
 from eligibility import load_schemes
 
 logger = logging.getLogger("sahayak.coordinator")
@@ -118,8 +118,48 @@ def handle_message(
     schemes = load_schemes()
     current_state = session["state"]
 
-    # 2. State: COLLECT_PROFILE or general profile updates
-    if current_state in {"COLLECT_PROFILE", "MATCH"}:
+    # Check if user expresses document intent or scheme selection
+    is_doc_intent = any(w in message.lower() for w in ["document", "checklist", "कहाँ", "दस्तावेज़", "दस्तावेज", "कागज़", "कागज", "कागजात"])
+    matched_scheme_id = None
+    for s in schemes:
+        s_id = s["id"]
+        s_name_en = s.get("name_en", "").lower()
+        s_name_hi = s.get("name_hi", "")
+        if s_id in message.lower() or (s_name_en and s_name_en in message.lower()) or (s_name_hi and s_name_hi in message):
+            matched_scheme_id = s_id
+            break
+
+    # 2. State: DOCUMENTS or transition from MATCH to DOCUMENTS
+    if current_state == "DOCUMENTS" or (current_state == "MATCH" and (is_doc_intent or matched_scheme_id)):
+        target_scheme = matched_scheme_id or session.get("selected_scheme")
+        if not target_scheme:
+            eligible = [m["scheme_id"] for m in session.get("matches", []) if m.get("status") == "eligible"]
+            if eligible:
+                target_scheme = eligible[0]
+            elif schemes:
+                target_scheme = schemes[0]["id"]
+
+        session["selected_scheme"] = target_scheme
+        session["state"] = "DOCUMENTS"
+
+        t_doc = time.perf_counter()
+        doc_res = document_agent(
+            scheme_id=target_scheme,
+            schemes=schemes,
+            lang=session["lang"],
+            provider=provider,
+        )
+        elapsed_doc_ms = int((time.perf_counter() - t_doc) * 1000)
+
+        trace.append({
+            "agent": "document",
+            "action": f"checklist for {target_scheme} ({len(doc_res['documents'])} items)",
+            "ms": elapsed_doc_ms,
+        })
+        reply = doc_res["reply"]
+
+    # 3. State: COLLECT_PROFILE or general profile updates
+    elif current_state in {"COLLECT_PROFILE", "MATCH"}:
         # Step A: Profile Agent extracts fields
         t_prof = time.perf_counter()
         prof_res = profile_agent(
@@ -181,7 +221,7 @@ def handle_message(
             reply = elig_res["reply"]
 
     else:
-        # Default fallback for advanced states (DOCUMENTS, FORM, REMINDERS)
+        # Default fallback for advanced states (FORM, REMINDERS, etc.)
         reply = "State handling in progress."
 
     session["history"].append({

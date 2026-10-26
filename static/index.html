@@ -474,6 +474,224 @@
     .scheme-btn.secondary:hover {
       background: rgba(255, 255, 255, 0.15);
     }
+    .scheme-btn.secondary.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--accent-saffron);
+      color: #fbbf24;
+    }
+
+    /* Documents Checklist Box on Scheme Cards */
+    .docs-checklist-box {
+      margin-top: 14px;
+      background: rgba(10, 14, 23, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 14px;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .docs-checklist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .docs-checklist-title {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .docs-count-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #e5e7eb;
+      transition: all 0.2s;
+    }
+
+    .docs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .doc-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .doc-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .doc-item.doc-item-checked {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .doc-checkbox {
+      width: 17px;
+      height: 17px;
+      accent-color: var(--accent-emerald);
+      cursor: pointer;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .doc-info {
+      flex: 1;
+    }
+
+    .doc-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #f3f4f6;
+      line-height: 1.3;
+    }
+
+    .doc-item.doc-item-checked .doc-name {
+      color: #a7f3d0;
+      text-decoration: line-through;
+    }
+
+    .doc-source {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    .doc-upload-container {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .doc-upload-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .doc-upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.25));
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #93c5fd;
+      transition: all 0.2s ease;
+    }
+
+    .doc-upload-btn:hover {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(37, 99, 235, 0.4));
+      border-color: #60a5fa;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .doc-sample-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 0.74rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      transition: all 0.2s;
+    }
+
+    .doc-sample-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #ffffff;
+    }
+
+    .doc-upload-hint {
+      font-size: 0.7rem;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .doc-upload-status {
+      font-size: 0.76rem;
+      padding: 8px 10px;
+      border-radius: 6px;
+      line-height: 1.4;
+      display: none;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .doc-upload-status.loading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+    }
+
+    .doc-upload-status.success {
+      display: block;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34d399;
+    }
+
+    .doc-upload-status.warning {
+      display: block;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+    }
+
+    .doc-upload-status.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+
+    .doc-item-badge {
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
 
     .scheme-card.maybe {
       border-color: rgba(245, 158, 11, 0.35);
@@ -1440,6 +1658,74 @@
               reasonsHtml += `<li style="color: #fbbf24;">⏳ ${currentLang === 'hi' ? 'अपेक्षित जानकारी' : 'Required info'}: ${escapeHtml(m.missing_fields.join(', '))}</li>`;
             }
 
+            // Extract verified documents checklist
+            const docs = (m.documents && m.documents.length > 0)
+              ? m.documents
+              : (SCHEME_DOCS[m.scheme_id] || []).map(d => ({
+                  id: d.id,
+                  name: currentLang === 'hi' ? d.name_hi : d.name_en,
+                  where_to_get: currentLang === 'hi' ? d.where_hi : d.where_en
+                }));
+
+            const docChecklistHtml = docs.length > 0 ? `
+              <div class="docs-checklist-box" id="docs_box_${m.scheme_id}" style="display: none;">
+                <div class="docs-checklist-header">
+                  <span class="docs-checklist-title">📋 ${currentLang === 'hi' ? 'आवश्यक दस्तावेज़ चेकलिस्ट (Required Documents)' : 'Required Documents Checklist'}</span>
+                  <span class="docs-count-badge" id="docs_count_${m.scheme_id}">0/${docs.length} ${currentLang === 'hi' ? 'तैयार' : 'ready'}</span>
+                </div>
+                <div class="docs-list">
+                  ${docs.map(doc => `
+                    <label class="doc-item" id="doc_item_${m.scheme_id}_${doc.id}">
+                      <input 
+                        type="checkbox" 
+                        class="doc-checkbox" 
+                        id="chk_${m.scheme_id}_${doc.id}" 
+                        data-scheme-id="${m.scheme_id}" 
+                        data-doc-id="${doc.id}" 
+                        onchange="updateDocProgress('${m.scheme_id}')"
+                      />
+                      <div class="doc-info">
+                        <div class="doc-name">
+                          ${escapeHtml(doc.name)}
+                          <span class="doc-badge-slot" id="badge_${m.scheme_id}_${doc.id}"></span>
+                        </div>
+                        <div class="doc-source">📍 ${escapeHtml(doc.where_to_get)}</div>
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+
+                <div class="doc-upload-container">
+                  <div class="doc-upload-bar">
+                    <label class="doc-upload-btn" id="upload_btn_${m.scheme_id}" title="Upload document photo for AI vision verification">
+                      📷 <span>${currentLang === 'hi' ? 'दस्तावेज़ अपलोड करें (Upload Document)' : 'Upload Document'}</span>
+                      <input 
+                        type="file" 
+                        id="file_input_${m.scheme_id}"
+                        accept="image/*" 
+                        class="doc-file-input" 
+                        onchange="handleDocUpload(event, '${m.scheme_id}')" 
+                        style="display: none;" 
+                      />
+                    </label>
+                    <button 
+                      type="button" 
+                      class="doc-sample-btn" 
+                      id="sample_btn_${m.scheme_id}" 
+                      onclick="testUploadSampleDoc('${m.scheme_id}')"
+                      title="Test vision checking with a sample Aadhaar card"
+                    >
+                      🧪 ${currentLang === 'hi' ? 'नमूना आधार कार्ड जाँचें' : 'Test Sample Aadhaar'}
+                    </button>
+                  </div>
+                  <div class="doc-upload-hint">
+                    ${currentLang === 'hi' ? 'ℹ️ AI दस्तावेज़ की जाँच कर चेकलिस्ट में टिक करेगा (फ़ाइल सुरक्षित है, कभी सहेजी नहीं जाती)' : 'ℹ️ AI will verify the document and tick the checklist (processed in memory, never saved)'}
+                  </div>
+                  <div class="doc-upload-status" id="doc_status_${m.scheme_id}"></div>
+                </div>
+              </div>
+            ` : '';
+
             card.innerHTML = `
               <div class="scheme-header">
                 <div class="scheme-title">${escapeHtml(title)}</div>
@@ -1448,10 +1734,14 @@
               <div class="scheme-benefit">🎯 ${escapeHtml(benefit)}</div>
               ${reasonsHtml ? `<ul class="scheme-reasons">${reasonsHtml}</ul>` : ''}
               <div class="scheme-actions">
+                <button class="scheme-btn secondary" id="btn_docs_${m.scheme_id}" onclick="toggleDocChecklist('${m.scheme_id}', this)" title="Show required documents checklist">
+                  📋 What documents do I need?
+                </button>
                 <a href="${link}" target="_blank" rel="noopener noreferrer" class="scheme-btn primary">
                   🌐 ${currentLang === 'hi' ? 'आधिकारिक पोर्टल (Official Portal)' : 'Official Portal'}
                 </a>
               </div>
+              ${docChecklistHtml}
               <div class="scheme-verify-note">
                 ℹ️ ${currentLang === 'hi' ? 'कृपया आधिकारिक पोर्टल पर जाकर नियमों का सत्यापन अवश्य करें।' : 'Please verify all rules and details on the official portal.'}
               </div>
@@ -1547,6 +1837,257 @@
       stopSpeaking();
       sendQuickMessage('मैं उन्नाव का किसान हूँ, मेरे पास दो एकड़ ज़मीन है');
     }
+
+    // Fallback Scheme Documents dictionary
+    const SCHEME_DOCS = {
+      'pm-kisan': [
+        { id: 'aadhaar', name_en: 'Aadhaar Card', name_hi: 'आधार कार्ड', where_en: 'UIDAI portal or nearest Aadhaar Seva Kendra / CSC', where_hi: 'UIDAI पोर्टल या निकटतम आधार सेवा केंद्र / जन सेवा केंद्र' },
+        { id: 'land_record', name_en: 'Land Ownership Record (Khata / Khasra / Khatauni)', name_hi: 'भूमि स्वामित्व रिकॉर्ड (खसरा / खतौनी)', where_en: 'State Revenue Department portal or local Tehsil / Patwari office', where_hi: 'राज्य राजस्व विभाग का पोर्टल या स्थानीय तहसील / पटवारी कार्यालय' },
+        { id: 'bank_passbook', name_en: 'Aadhaar-linked Bank Account Passbook', name_hi: 'आधार से जुड़ा बैंक खाता पासबुक', where_en: 'Your local bank branch or post office savings account', where_hi: 'आपकी स्थानीय बैंक शाखा या डाकघर बचत बैंक' }
+      ],
+      'pm-jay': [
+        { id: 'aadhaar', name_en: 'Aadhaar Card', name_hi: 'आधार कार्ड', where_en: 'UIDAI portal or nearest Aadhaar Seva Kendra / CSC', where_hi: 'UIDAI पोर्टल या निकटतम आधार सेवा केंद्र / सीएससी' },
+        { id: 'ration_card', name_en: 'Ration Card / BPL Card / Family ID', name_hi: 'राशन कार्ड / बीपीएल कार्ड / परिवार पहचान पत्र', where_en: 'State Food & Civil Supplies Department portal or Fair Price Shop / CSC', where_hi: 'खाद्य एवं नागरिक आपूर्ति विभाग या राशन डीलर / सीएससी' }
+      ],
+      'pm-ujjwala': [
+        { id: 'aadhaar', name_en: 'Aadhaar Card of Applicant and adult family members', name_hi: 'आवेदक और परिवार के वयस्क सदस्यों का आधार कार्ड', where_en: 'UIDAI portal or nearest Aadhaar Center', where_hi: 'UIDAI पोर्टल या निकटतम आधार सेवा केंद्र' },
+        { id: 'ration_card', name_en: 'Ration Card establishing family composition / BPL status', name_hi: 'राशन कार्ड (पारिवारिक स्थिति प्रमाणित करने के लिए)', where_en: 'Local Food & Civil Supplies Department / CSC', where_hi: 'स्थानीय खाद्य आपूर्ति विभाग / जन सेवा केंद्र' },
+        { id: 'bank_passbook', name_en: 'Bank Account Passbook (Jan Dhan or Savings account)', name_hi: 'बैंक खाता पासबुक (जन धन या बचत खाता)', where_en: 'Bank branch or bank mitra', where_hi: 'बैंक शाखा या बैंक मित्र' }
+      ],
+      'national-scholarship': [
+        { id: 'aadhaar', name_en: 'Aadhaar Card of the Student', name_hi: 'विद्यार्थी का आधार कार्ड', where_en: 'UIDAI portal or nearest Aadhaar center', where_hi: 'UIDAI पोर्टल या निकटतम आधार केंद्र' },
+        { id: 'income_certificate', name_en: 'Income Certificate issued by competent revenue authority', name_hi: 'सक्षम राजस्व अधिकारी द्वारा जारी आय प्रमाण पत्र', where_en: 'Tehsil office, Revenue department e-district portal, or CSC', where_hi: 'तहसील कार्यालय, ई-डिस्ट्रिक्ट पोर्टल या जन सेवा केंद्र' },
+        { id: 'marksheet', name_en: 'Previous Qualifying Educational Marksheet', name_hi: 'पिछली उत्तीर्ण कक्षा की अंकतालिका', where_en: 'School, college, or education board', where_hi: 'स्कूल, कॉलेज या संबंधित शिक्षा बोर्ड' },
+        { id: 'bank_passbook', name_en: 'Student Bank Account Passbook', name_hi: 'विद्यार्थी का बैंक खाता पासबुक', where_en: 'Student bank branch', where_hi: 'विद्यार्थी की बैंक शाखा' }
+      ]
+    };
+
+    function toggleDocChecklist(schemeId, btn) {
+      const box = document.getElementById(`docs_box_${schemeId}`);
+      if (!box) return;
+      const isHidden = box.style.display === 'none' || !box.style.display;
+      box.style.display = isHidden ? 'block' : 'none';
+      if (btn) {
+        btn.classList.toggle('active', isHidden);
+      }
+      if (isHidden) {
+        updateDocProgress(schemeId);
+        updateTracePanel([{
+          agent: 'document',
+          action: `checklist opened for ${schemeId}`,
+          ms: 10
+        }]);
+      }
+    }
+
+    function updateDocProgress(schemeId) {
+      const box = document.getElementById(`docs_box_${schemeId}`);
+      if (!box) return;
+      const checkboxes = box.querySelectorAll('.doc-checkbox');
+      const checked = box.querySelectorAll('.doc-checkbox:checked');
+      const badge = document.getElementById(`docs_count_${schemeId}`);
+      if (badge) {
+        badge.innerText = `${checked.length}/${checkboxes.length} ${currentLang === 'hi' ? 'तैयार' : 'ready'}`;
+        if (checked.length === checkboxes.length && checkboxes.length > 0) {
+          badge.style.background = 'rgba(16, 185, 129, 0.3)';
+          badge.style.color = '#34d399';
+        } else {
+          badge.style.background = 'rgba(255, 255, 255, 0.1)';
+          badge.style.color = '#e5e7eb';
+        }
+      }
+      checkboxes.forEach(cb => {
+        const item = cb.closest('.doc-item');
+        if (item) {
+          item.classList.toggle('doc-item-checked', cb.checked);
+        }
+      });
+    }
+
+    async function handleDocUpload(event, schemeId) {
+      const input = event.target;
+      const file = input.files && input.files[0];
+      if (!file) return;
+
+      await uploadDocFile(file, schemeId);
+      input.value = ''; // Reset input so same file can be re-selected if desired
+    }
+
+    async function uploadDocFile(file, schemeId) {
+      const statusBox = document.getElementById(`doc_status_${schemeId}`);
+      if (!statusBox) return;
+
+      // Show loading status
+      statusBox.style.display = 'flex';
+      statusBox.className = 'doc-upload-status loading';
+      statusBox.innerHTML = `
+        <div class="typing-dots" style="margin-right: 6px;">
+          <span></span><span></span><span></span>
+        </div>
+        <span>${currentLang === 'hi' ? 'एआई दस्तावेज़ का विश्लेषण कर रहा है... (AI Vision analyzing document...)' : 'AI Vision analyzing document...'}</span>
+      `;
+
+      // Log trace in side panel
+      updateTracePanel([{
+        agent: 'document',
+        action: `uploading document for ${schemeId} (${file.name || 'image'})`,
+        ms: 50
+      }]);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      if (currentSessionId) {
+        formData.append('session_id', currentSessionId);
+      }
+      if (schemeId) {
+        formData.append('scheme_id', schemeId);
+      }
+      formData.append('lang', currentLang);
+
+      const t0 = Date.now();
+      try {
+        const res = await fetch('/upload-doc', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const elapsed = Date.now() - t0;
+
+        // Log trace in side panel
+        updateTracePanel([{
+          agent: 'document',
+          action: `verified ${data.doc_type} (matches=${data.matches_checklist}, readable=${data.readable})`,
+          ms: elapsed
+        }]);
+
+        renderDocUploadResult(schemeId, data);
+      } catch (err) {
+        console.error('Doc upload error:', err);
+        statusBox.style.display = 'block';
+        statusBox.className = 'doc-upload-status error';
+        statusBox.innerHTML = `❌ ${currentLang === 'hi' ? 'दस्तावेज़ सत्यापन में समस्या आई। कृपया दोबारा प्रयास करें।' : 'Document verification error. Please try again.'}`;
+      }
+    }
+
+    function renderDocUploadResult(schemeId, data) {
+      const statusBox = document.getElementById(`doc_status_${schemeId}`);
+      if (!statusBox) return;
+
+      statusBox.style.display = 'block';
+
+      let targetDocId = data.matched_doc_id || data.doc_type;
+      let ticked = false;
+
+      // If matched, find checkbox and tick it
+      if (data.matches_checklist && targetDocId) {
+        const chk = document.getElementById(`chk_${schemeId}_${targetDocId}`);
+        if (chk) {
+          chk.checked = true;
+          updateDocProgress(schemeId);
+          ticked = true;
+
+          // Add verified badge to the item
+          const badgeSlot = document.getElementById(`badge_${schemeId}_${targetDocId}`);
+          if (badgeSlot) {
+            badgeSlot.innerHTML = `<span class="doc-item-badge">✔ ${escapeHtml(data.masked_id || (currentLang === 'hi' ? 'सत्यापित' : 'Verified'))}</span>`;
+          }
+        }
+      }
+
+      // Warning & Status feedback
+      if (data.matches_checklist && ticked) {
+        statusBox.className = 'doc-upload-status success';
+        let warningNote = '';
+        if (!data.readable) {
+          warningNote = `<div style="color: #fbbf24; margin-top: 4px; font-weight: 500;">⚠️ ${currentLang === 'hi' ? 'चेतावनी: दस्तावेज़ का पाठ्य थोड़ा धुंधला प्रतीत होता है। कृपया सुनिश्चित करें कि नाम आधिकारिक रिकॉर्ड से मेल खाता है।' : 'Warning: Document text appears blurry or difficult to read. Please verify name matches official records.'}</div>`;
+        }
+        statusBox.innerHTML = `
+          <div>
+            <strong>✅ ${currentLang === 'hi' ? 'दस्तावेज़ सत्यापित एवं चेकलिस्ट में टिक किया गया!' : 'Document verified and ticked in checklist!'}</strong>
+            ${data.masked_id ? ` <span style="font-family: monospace; background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px;">ID: ${escapeHtml(data.masked_id)}</span>` : ''}
+          </div>
+          ${warningNote}
+          <div style="font-size: 0.73rem; opacity: 0.9; margin-top: 4px;">${escapeHtml(data.notes || '')}</div>
+        `;
+      } else if (data.doc_type && data.doc_type !== 'unknown') {
+        statusBox.className = 'doc-upload-status warning';
+        statusBox.innerHTML = `
+          <div>
+            <strong>⚠️ ${currentLang === 'hi' ? 'दस्तावेज़ पहचाना गया लेकिन इस योजना की चेकलिस्ट में नहीं है:' : 'Document recognized but not required for this scheme:'}</strong>
+            ${escapeHtml(data.doc_type)}
+          </div>
+          <div style="font-size: 0.73rem; opacity: 0.9; margin-top: 4px;">${escapeHtml(data.notes || '')}</div>
+        `;
+      } else {
+        statusBox.className = 'doc-upload-status warning';
+        statusBox.innerHTML = `
+          <div><strong>⚠️ ${currentLang === 'hi' ? 'दस्तावेज़ स्पष्ट नहीं है या पहचाना नहीं जा सका:' : 'Document could not be recognized:'}</strong></div>
+          <div style="font-size: 0.73rem; opacity: 0.9; margin-top: 4px;">${escapeHtml(data.notes || '')}</div>
+        `;
+      }
+    }
+
+    function testUploadSampleDoc(schemeId) {
+      // Generate a fake sample Aadhaar image using HTML Canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 250;
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 400, 250);
+
+      // Border & Header
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(10, 10, 380, 230);
+
+      ctx.fillStyle = '#f97316';
+      ctx.fillRect(10, 10, 380, 25);
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(10, 215, 380, 25);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('GOVERNMENT OF INDIA / भारत सरकार', 30, 60);
+
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#0f172a';
+      ctx.fillText('AADHAAR CARD / आधार कार्ड', 30, 85);
+
+      // Photo placeholder box
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(30, 100, 70, 90);
+      ctx.fillStyle = '#475569';
+      ctx.font = '12px sans-serif';
+      ctx.fillText('PHOTO', 45, 150);
+
+      // Details
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('Name: Ramesh Kumar', 120, 120);
+      ctx.fillText('DOB: 15/08/1985', 120, 140);
+      ctx.fillText('Gender: Male / पुरुष', 120, 160);
+
+      // Masked Aadhaar number
+      ctx.font = 'bold 17px monospace';
+      ctx.fillStyle = '#b91c1c';
+      ctx.fillText('XXXX XXXX 4321', 120, 195);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], 'sample_aadhaar.png', { type: 'image/png' });
+          uploadDocFile(file, schemeId);
+        }
+      }, 'image/png');
+    }
+
 
     function escapeHtml(text) {
       if (!text) return '';

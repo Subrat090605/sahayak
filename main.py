@@ -9,14 +9,16 @@ Routes per docs/ARCHITECTURE.md:
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from agents import verify_document_image
 from coordinator import get_or_create_session, handle_message
 
 # Load environment variables without exposing secrets
@@ -48,6 +50,15 @@ class ChatResponse(BaseModel):
     state: str = Field(..., description="Current session state machine state")
     matches: list[dict[str, Any]] = Field(default_factory=list, description="Scheme evaluation results")
     trace: list[dict[str, Any]] = Field(default_factory=list, description="Execution trace entries")
+
+
+class UploadDocResponse(BaseModel):
+    doc_type: str = Field(..., description="Detected document type (aadhaar, land_record, bank_passbook, etc.)")
+    matches_checklist: bool = Field(..., description="Whether document matches an expected checklist item")
+    matched_doc_id: str | None = Field(default=None, description="Checklist item ID that was matched")
+    readable: bool = Field(..., description="Whether the document text and name are readable")
+    masked_id: str | None = Field(default=None, description="Masked ID showing only last 4 digits (e.g. XXXX-XXXX-1234)")
+    notes: str = Field(..., description="Analysis notes or friendly guidance for citizen")
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +108,83 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
                 "ms": 0,
             }],
         )
+
+
+@app.post("/upload-doc", response_model=UploadDocResponse)
+async def upload_doc_endpoint(
+    file: UploadFile = File(...),
+    session_id: str | None = Form(None),
+    scheme_id: str | None = Form(None),
+    lang: str | None = Form("hi"),
+) -> UploadDocResponse:
+    """Document verification endpoint:
+    Accepts an uploaded document image, processes it in memory only (never saved to disk),
+    passes to the active vision model, verifies against scheme checklist,
+    and returns document type, checklist match, readability, and masked ID.
+    """
+    t0 = time.time()
+    try:
+        # Read image bytes strictly in memory - NEVER saved to disk
+        image_bytes = await file.read()
+        mime_type = file.content_type or "image/jpeg"
+
+        # Determine target scheme_id from session if not directly supplied
+        resolved_scheme = scheme_id
+        session = None
+        if session_id:
+            session = get_or_create_session(session_id, lang=lang or "hi")
+            if not resolved_scheme:
+                resolved_scheme = session.get("selected_scheme")
+                if not resolved_scheme and session.get("matches"):
+                    matches = session["matches"]
+                    if len(matches) == 1:
+                        resolved_scheme = matches[0].get("scheme_id")
+
+        result = verify_document_image(
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            scheme_id=resolved_scheme,
+            lang=lang or "hi",
+            filename=file.filename,
+        )
+
+        elapsed_ms = int((time.time() - t0) * 1000)
+
+        # Update session trace if session exists
+        if session is not None:
+            trace_entry = {
+                "agent": "document",
+                "action": f"verified {result['doc_type']} (matches={result['matches_checklist']}, readable={result['readable']})",
+                "ms": elapsed_ms,
+            }
+            session.setdefault("trace", []).append(trace_entry)
+            session.setdefault("history", []).append(trace_entry)
+
+        return UploadDocResponse(
+            doc_type=result["doc_type"],
+            matches_checklist=result["matches_checklist"],
+            matched_doc_id=result.get("matched_doc_id"),
+            readable=result["readable"],
+            masked_id=result.get("masked_id"),
+            notes=result["notes"],
+        )
+    except Exception as exc:
+        logger.error("Error in /upload-doc endpoint: %s", exc, exc_info=True)
+        user_lang = lang or "hi"
+        fallback_notes = (
+            "क्षमा करें, दस्तावेज़ अपलोड या सत्यापन में समस्या आई है। कृपया दोबारा प्रयास करें।"
+            if user_lang == "hi"
+            else "Sorry, an error occurred during document upload or verification. Please try again."
+        )
+        return UploadDocResponse(
+            doc_type="unknown",
+            matches_checklist=False,
+            matched_doc_id=None,
+            readable=False,
+            masked_id=None,
+            notes=fallback_notes,
+        )
+
 
 
 # ---------------------------------------------------------------------------
